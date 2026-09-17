@@ -1,0 +1,259 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
+import { ArrowLeft, User, Mail, Wallet, AtSign, Edit2, Loader2, X, LogOut } from 'lucide-react';
+import axiosClient from '../../shared/api/axiosClient';
+import * as usersApi from './users.api';
+
+const Profile = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [profileData, setProfileData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  const [showEditUsername, setShowEditUsername] = useState(false);
+  const [showEditPic, setShowEditPic] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [picUrl, setPicUrl] = useState('');
+  const [editing, setEditing] = useState(false);
+
+  const fetchProfile = async () => {
+    try {
+      const res = await axiosClient.get('/auth/me');
+      setProfileData(res.data);
+    } catch (err) {
+      console.error('Failed to fetch profile', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const handleChangeUsername = async (e) => {
+    e.preventDefault();
+    setEditing(true);
+    try {
+      await usersApi.changeUsername(newUsername);
+      await fetchProfile(); // refresh data
+      setShowEditUsername(false);
+      setNewUsername('');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to change username');
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  const convertGDriveLink = (link) => {
+    const match = link.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return `https://lh3.googleusercontent.com/d/${match[1]}`;
+    }
+    return link;
+  };
+
+  const handleUpdatePic = async (e) => {
+    e.preventDefault();
+    setEditing(true);
+    try {
+      const convertedUrl = convertGDriveLink(picUrl);
+      await usersApi.updateProfilePicture(convertedUrl);
+      await fetchProfile();
+      setShowEditPic(false);
+      setPicUrl('');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to update profile picture');
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white">
+      {/* Header */}
+      <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-10">
+        <div className="max-w-2xl mx-auto flex items-center justify-between">
+          <button 
+            onClick={() => navigate('/')}
+            className="p-2 hover:bg-slate-800 rounded-full transition-colors"
+          >
+            <ArrowLeft className="w-6 h-6 text-slate-300" />
+          </button>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-emerald-200 bg-clip-text text-transparent">
+            My Profile
+          </h1>
+          <div className="w-10"></div> {/* Spacer */}
+        </div>
+      </div>
+
+      <div className="max-w-2xl mx-auto p-4 py-8">
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Global Wallet Card */}
+            <div className="bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-3xl p-6 shadow-xl shadow-emerald-900/20 relative overflow-hidden">
+              <div className="absolute -right-4 -bottom-4 p-4 opacity-20 pointer-events-none">
+                <Wallet className="w-32 h-32" />
+              </div>
+              <div className="relative z-10 flex flex-col items-start gap-4">
+                <div>
+                  <p className="text-emerald-100 font-medium mb-1">Wallet Balance</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl font-bold text-white">
+                      ₹{profileData?.globalBalance?.toLocaleString() || 0}
+                    </span>
+                  </div>
+                  <p className="text-sm text-emerald-100/80 mt-1">
+                    Use this balance to buy into games.
+                  </p>
+                </div>
+                <a 
+                  href="https://rzp.io/rzp/teenpatti-wallet"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-white/20 hover:bg-white/30 text-white font-bold px-6 py-2.5 rounded-xl backdrop-blur-sm transition-all shadow-lg border border-white/10 text-center"
+                >
+                  Deposit
+                </a>
+              </div>
+            </div>
+
+            {/* User Details */}
+            <div className="bg-slate-900/50 rounded-3xl border border-slate-800 overflow-hidden">
+              <div className="p-6 border-b border-slate-800/50 flex flex-col sm:flex-row items-center gap-6">
+                <div className="relative group">
+                  {profileData?.profilePicture ? (
+                    <img src={profileData.profilePicture} alt="Profile" className="w-24 h-24 rounded-full object-cover border-4 border-emerald-500/30" />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-slate-800 border-4 border-emerald-500/30 flex items-center justify-center text-3xl font-bold text-emerald-400">
+                      {profileData?.name?.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <button 
+                    onClick={() => setShowEditPic(true)}
+                    className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Edit2 className="w-6 h-6 text-white" />
+                  </button>
+                </div>
+                <div className="flex-1 text-center sm:text-left">
+                  <h2 className="text-2xl font-bold text-white">{profileData?.name}</h2>
+                  <p className="text-slate-400">@{profileData?.username}</p>
+                </div>
+              </div>
+              <div className="p-4 border-b border-slate-800/50 flex items-center gap-3">
+                <AtSign className="text-emerald-400 w-5 h-5" />
+                <span className="text-slate-400 font-medium text-sm">Username</span>
+                <span className="text-white ml-auto">@{profileData?.username}</span>
+                <button 
+                  onClick={() => setShowEditUsername(true)}
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-md transition-colors"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-4 flex items-center gap-3">
+                <Mail className="text-emerald-400 w-5 h-5" />
+                <span className="text-slate-400 font-medium text-sm">Email Address</span>
+                <span className="text-white ml-auto truncate max-w-[200px] sm:max-w-none">{profileData?.email}</span>
+              </div>
+            </div>
+
+            {/* Logout Button */}
+            <button 
+              onClick={logout}
+              className="w-full mt-6 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 font-bold py-4 rounded-2xl transition-all flex items-center justify-center gap-2"
+            >
+              <LogOut className="w-5 h-5" /> Sign Out
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Edit Username Modal */}
+      {showEditUsername && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 max-w-md w-full shadow-2xl relative">
+            <button 
+              onClick={() => setShowEditUsername(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-full transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-2xl font-bold text-emerald-400 mb-2">
+              Change Username
+            </h2>
+            <p className="text-slate-400 text-sm mb-6">
+              Changing your username costs <strong className="text-yellow-400">₹1,000</strong> from your global wallet.
+            </p>
+            <form onSubmit={handleChangeUsername}>
+              <input
+                type="text"
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value.toLowerCase())}
+                placeholder="New Username"
+                required
+                minLength={3}
+                maxLength={20}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 mb-6 focus:outline-none focus:border-emerald-500 text-white"
+              />
+              <button
+                type="submit"
+                disabled={editing || !newUsername}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {editing ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Pay ₹1000 & Change'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Profile Picture Modal */}
+      {showEditPic && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 max-w-md w-full shadow-2xl relative">
+            <button 
+              onClick={() => setShowEditPic(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-full transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-2xl font-bold text-emerald-400 mb-2">
+              Update Profile Picture
+            </h2>
+            <p className="text-slate-400 text-sm mb-6">
+              Upload your image to Google Drive, make it public ("Anyone with the link can view"), and paste the link below.
+            </p>
+            <form onSubmit={handleUpdatePic}>
+              <input
+                type="url"
+                value={picUrl}
+                onChange={(e) => setPicUrl(e.target.value)}
+                placeholder="Paste Google Drive Link here"
+                required
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 mb-6 focus:outline-none focus:border-emerald-500 text-white"
+              />
+              <button
+                type="submit"
+                disabled={editing || !picUrl}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {editing ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Update Picture'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      </div>
+  );
+};
+
+export default Profile;
