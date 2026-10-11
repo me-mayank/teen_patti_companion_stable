@@ -81,6 +81,7 @@ function board() {
     './round.api': Object.fromEntries(['bet', 'betTwice', 'pack', 'requestShow', 'requestSideShow', 'seeCards', 'startRound', 'respondSideShow'].map(name => [name, () => { calls.push(name); return action(); }])),
     'lucide-react': Object.fromEntries(['Loader2', 'Crown', 'ArrowLeft', 'BookOpen', 'History', 'Wifi', 'WifiOff', 'Eye'].map(name => [name, name])),
     './components/PlayerCircle': 'PlayerCircle', './components/PotArea': 'PotArea', './components/ActionPanel': 'ActionPanel',
+    './components/Dealer': 'Dealer',
     './components/PlayingCard': { __esModule: true, default: 'PlayingCard', CardHand: 'CardHand', rankLabel: String },
     './table.css': {},
     './tableSync': { createTableSync },

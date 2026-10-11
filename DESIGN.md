@@ -16,10 +16,10 @@ colors:
   table-control: "#34281c"
   table-gold: "#e3b86a"
   table-text: "#fbf3e5"
-  table-muted: "#c3b69f"
-  felt-deep: "#154b35"
-  felt-light: "#23694c"
-  rail: "#644627"
+  table-muted: "#d7c6ad"
+  felt-deep: "#093d2b"
+  felt-light: "#328968"
+  rail: "#75502d"
   card-face: "#ffffff"
   card-black: "#000000"
   card-red: "#ff0000"
@@ -97,7 +97,7 @@ components:
 
 This record captures the existing app identity and the implemented game-table extension. Warm near-black surfaces, cream text and gold controls continue the palette in `frontend/src/index.css`. The new green felt is specific to the card table; it does not replace the surrounding app's identity. This is a descriptive scan of the implementation, not a newly commissioned brand direction.
 
-The table is an operating surface: the player's hand, stake, active turn and available actions take priority over decorative detail. Teen Patti Gold's official store screenshots informed the felt oval, radial seating, card fans and dedicated action row. No reference artwork or branding was copied. The table uses CSS geometry, suit characters and existing icon components rather than new image assets. No PRODUCT.md was supplied.
+The table is an operating surface: the player's hand, stake, active turn and available actions take priority over decorative detail. Teen Patti Gold's official store screenshots informed the felt oval, radial seating, card fans and dedicated action row. No reference artwork or branding was copied. The table combines CSS geometry with original generated lounge and dealer artwork; the classic vector card deck is shared by all hands. No PRODUCT.md was supplied.
 
 **Key Characteristics:**
 
@@ -170,6 +170,12 @@ Table controls are substantial, readable actions with a minimum height of 46px, 
 ### Navigation
 
 The table header contains a back link, truncated game title, mode/round/boot summary, connection indicator, rules toggle and history link. Icon controls have a minimum height of 44px; their desktop width is at least 44px, reducing to 36px on mobile. Connection text hides on mobile while the icon remains; the entire indicator hides at the narrowest breakpoint. Hover brightens the control surface and text.
+
+### Lounge and dealers
+
+The table screen has an original illustrated private card lounge: burgundy velvet curtains, walnut architecture and warm chandelier lighting. A dark overlay keeps gameplay readable; the hand and action area has a quiet warm-black surface. The felt is a brighter emerald with a layered gold-and-walnut rail. This artwork is confined to the game screen.
+
+A compact dealer area above the table offers two original adult female characters: Anaya in an emerald waistcoat and Tara in a burgundy sari. Their portraits have transparent backgrounds. The two labelled buttons use `aria-pressed`, keyboard focus and at least 44px touch height. Selecting a dealer changes only that viewer's decoration and saves their choice in browser storage. Storage failures fall back gracefully. Mobile reduces the portrait and control widths without hiding the choices or covering any seat.
 
 ### Cards and hands
 

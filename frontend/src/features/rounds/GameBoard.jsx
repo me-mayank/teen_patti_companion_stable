@@ -8,6 +8,7 @@ import { Loader2, Crown, ArrowLeft, BookOpen, History, Wifi, WifiOff, Eye } from
 import PlayerCircle from './components/PlayerCircle';
 import PotArea from './components/PotArea';
 import ActionPanel from './components/ActionPanel';
+import Dealer from './components/Dealer';
 import PlayingCard, { CardHand, rankLabel } from './components/PlayingCard';
 import { createTableSync } from './tableSync';
 import { createRefreshScheduler } from '../../shared/hooks/refreshScheduler';
@@ -137,6 +138,7 @@ export default function GameBoard() {
       <div className="table-toolbar"><span className={`connection-status ${connected ? 'is-connected' : ''}`} title={connected ? 'Connected to the live table' : 'Reconnecting; the table refreshes automatically'}>{connected ? <Wifi size={16} /> : <WifiOff size={16} />}<span>{connected ? 'Live' : 'Reconnecting'}</span></span><button className="table-icon-button" onClick={() => setRules(!rules)} aria-expanded={rules} aria-label="Table rules"><BookOpen size={20} /></button><Link className="table-icon-button" to={`/games/${gameId}/history`} aria-label="Game history"><History size={20} /></Link></div>
     </header>
     {error && <div className="table-error table-error-banner" role="alert">{error}<button onClick={fetchGameState}>Retry</button></div>}
+    <Dealer />
     {rules && <section className="table-rules"><h2>Table rules</h2><p>Three cards each. Trail beats pure sequence, sequence, colour, pair, then high card. Sequences rank AKQ, A23, KQJ, down to 234. Suits have equal value.</p><p>Blind pays the stake; seen pays twice the stake. A raise doubles the blind stake, up to ₹{game.bootAmount * game.maxBetMultiplier}. With two players left, either player can force a show on their turn, even against a blind opponent. No acceptance is needed. The requester loses a tie.</p><p>The pot limit is 100× boot (₹{(game.bootAmount * 100).toLocaleString('en-IN')}). The last payment is capped to the remaining amount. At the limit, all active hands are revealed and compared, with no extra fee. Equal best hands split the pot; spare rupees go in table seat order.</p><p>Side show compares with the previous active player. Both must be seen, with at least three players left. Accepting lets the two participants see each other's cards for the rest of the round. The lower hand packs; the requester packs on a tie. These cards stay private from other players.</p>{game.mode === 'JOKER' && <p>One indicator is drawn before the deal. Every card matching its rank is wild and takes the best possible value. The indicator is kept out of all hands.</p>}<button className="table-button" onClick={() => setRules(false)}>Close rules</button></section>}
     <section className="table-stage" aria-label="Teen Patti table">
       <div className="table-felt"><span className="felt-brand" aria-hidden="true">TEEN PATTI<span>COMPANION</span></span></div>
