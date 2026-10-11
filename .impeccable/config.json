@@ -11,6 +11,48 @@
         ],
         "createdAt": "2026-10-11T19:42:59.608Z",
         "reason": "Agent reviewed: the reported existing submit button uses charcoal text on the project gold accent tokens, with deliberate readable contrast; Tailwind color names are remapped in index.css."
+      },
+      {
+        "rule": "gray-on-color",
+        "value": "*",
+        "files": [
+          "frontend/src/App.jsx"
+        ],
+        "createdAt": "2026-10-11T20:46:14.915Z",
+        "reason": "Codex: detector false positive; slate-950 is #070606 on gold #D7A656, the documented high-contrast primary button palette."
+      },
+      {
+        "rule": "gray-on-color",
+        "value": "*",
+        "files": [
+          "frontend/src/features/games/Home.jsx"
+        ],
+        "createdAt": "2026-10-11T20:46:14.924Z",
+        "reason": "Codex: detector false positive; slate-950 is near-black #070606 on gold #D7A656, matching the documented primary button palette."
+      },
+      {
+        "rule": "gray-on-color",
+        "value": "*",
+        "files": [
+          "frontend/src/features/invitations/InvitationManagement.jsx"
+        ],
+        "createdAt": "2026-10-11T20:46:14.934Z",
+        "reason": "Codex: detector false positive; the finalize button uses documented near-black text on gold, not low-contrast gray."
+      },
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "frontend/src/features/games/Home.jsx"
+        ],
+        "createdAt": "2026-10-11T20:46:14.943Z",
+        "reason": "Codex: intentional existing gold brand wordmark preserved during gameplay optimization; DESIGN.md pins the incumbent warm black and gold identity."
+      },
+      {
+        "rule": "design-system-font",
+        "value": "source-code-pro",
+        "createdAt": "2026-10-11T20:46:14.953Z",
+        "reason": "Codex: existing monospace face is restricted to code elements, where a code font is appropriate; UI typography is unchanged."
       }
     ]
   }

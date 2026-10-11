@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const Round = require('./round.model');
 const Game = require('../games/game.model');
 const User = require('../users/user.model');
-const { recordTransaction } = require('../ledger/ledger.service');
+const { recordTransaction, recordTransactions } = require('../ledger/ledger.service');
 const turns = require('./turnManager.service');
 const { getIO } = require('../../shared/sockets');
 const { dealCards, compareHands } = require('../cards/cards.service');
@@ -17,17 +17,49 @@ const playerPopulation = [
 const readRound = query => query.select('+players.cards').populate(playerPopulation).lean();
 
 // Notifications only invalidate state. Private hands are fetched through authenticated HTTP.
-function notify(gameId) {
-  try { getIO().to(`game:${gameId}`).emit('round:update', { gameId: idOf(gameId) }); }
+function notify(round) {
+  try { getIO().to(`game:${round.gameId}`).emit('round:update', {
+    gameId: idOf(round.gameId), roundId: idOf(round._id), roundNumber: round.roundNumber, revision: round.revision,
+  }); }
   catch (error) { console.error('Round notification failed:', error.message); }
 }
 
 async function availableBalance(userId, session) {
-  const user = await User.findById(userId).select('globalBalance').session(session).lean();
-  if (!user) throw fail('Player not found', 404);
-  const games = await Game.find({ 'participants.userId': userId, status: { $nin: ['ENDED', 'ARCHIVED'] } })
+  const userQuery = User.findById(userId).select('globalBalance').session(session).lean();
+  const gamesQuery = Game.find({ 'participants.userId': userId, status: { $nin: ['ENDED', 'ARCHIVED'] } })
     .select('participants.userId participants.balance').session(session).lean();
+  // Parallel reads are safe outside a transaction. Session reads stay sequential.
+  const [user, games] = session ? [await userQuery, await gamesQuery] : await Promise.all([userQuery, gamesQuery]);
+  if (!user) throw fail('Player not found', 404);
   return user.globalBalance + games.reduce((sum, game) => sum + (game.participants.find(p => idOf(p.userId) === idOf(userId))?.balance || 0), 0);
+}
+
+async function chargeBoots(session, game, round) {
+  const amount = game.bootAmount;
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw fail('Invalid bet amount');
+  const userIds = round.players.map(player => player.userId);
+  // Lock every wallet before reading it. Concurrent spending at other tables
+  // conflicts on these same user records and retries the entire transaction.
+  await User.updateMany({ _id: { $in: userIds } }, { $inc: { __v: 1 } }, { session });
+  const users = await User.find({ _id: { $in: userIds } }).select('globalBalance').session(session).lean();
+  if (users.length !== userIds.length) throw fail('Player not found', 404);
+  const balances = new Map(users.map(user => [idOf(user._id), user.globalBalance]));
+  const games = await Game.find({ 'participants.userId': { $in: userIds }, status: { $nin: ['ENDED', 'ARCHIVED'] } })
+    .select('participants.userId participants.balance').session(session).lean();
+  for (const table of games) for (const player of table.participants) {
+    const id = idOf(player.userId);
+    if (balances.has(id)) balances.set(id, balances.get(id) + (player.balance || 0));
+  }
+  for (const player of round.players) {
+    const balance = balances.get(idOf(player.userId));
+    if (balance < amount) throw fail(`Insufficient balance. Required: ₹${amount}, available: ₹${balance}`);
+  }
+  await recordTransactions(session, round.players.map(player => ({
+    userId: player.userId, gameId: game._id, roundId: round._id, type: 'BOOT', amount: -amount,
+  })));
+  for (const player of round.players) player.totalContribution = amount;
+  round.potAmount = amount * round.players.length;
+  round.$locals.balances = new Map([...balances].map(([id, balance]) => [id, balance - amount]));
 }
 
 async function charge(session, game, round, player, amount, type) {
@@ -43,6 +75,8 @@ async function charge(session, game, round, player, amount, type) {
   const balance = await availableBalance(player.userId, session);
   if (balance < amount) throw fail(`Insufficient balance. Required: ₹${amount}, available: ₹${balance}`);
   await recordTransaction(session, { userId: player.userId, gameId: game._id, roundId: round._id, type, amount: -amount });
+  round.$locals.balances ||= new Map();
+  round.$locals.balances.set(idOf(player.userId), balance - amount);
   player.totalContribution += amount;
   round.potAmount += amount;
   if (round.potLimit && round.potAmount >= round.potLimit) return completeAtPotLimit(session, round);
@@ -65,6 +99,8 @@ async function awardPot(session, round, winners, reason) {
     winner.status = 'WINNER';
     winner.winAmount = share + (index < remainder ? 1 : 0);
     await recordTransaction(session, { userId: winner.userId, gameId: round.gameId, roundId: round._id, type: 'ROUND_WIN', amount: winner.winAmount });
+    const id = idOf(winner.userId);
+    if (round.$locals.balances?.has(id)) round.$locals.balances.set(id, round.$locals.balances.get(id) + winner.winAmount);
   }
 }
 
@@ -107,14 +143,14 @@ async function mutate(roundId, userId, action) {
       const game = await Game.findById(round.gameId).session(session);
       await canAccessGame(game, userId);
       await action(session, round, game);
+      round.revision = (round.revision || 0) + 1;
       await round.save({ session });
       committedRound = round;
       committedGame = game;
     });
   } finally { await session.endSession(); }
-  notify(committedGame._id);
-  const round = await Round.populate(committedRound.toObject(), playerPopulation);
-  return roundViewWithBalance(round, committedGame, userId);
+  notify(committedRound);
+  return committedView(committedRound, committedGame, userId);
 }
 
 async function startRound(gameId, userId) {
@@ -134,11 +170,11 @@ async function startRound(gameId, userId) {
       const order = game.turnOrder.map(idOf);
       if (order.length < 2 || order.length > 6 || new Set(order).size !== order.length || order.length !== participantIds.length || order.some(id => !participantIds.includes(id))) throw fail('Set a valid turn order for 2 to 6 players');
       const { hands, jokerCard } = dealCards(order.length, game.mode || 'CLASSIC');
-      const round = new Round({ gameId, roundNumber: game.currentRoundNumber + 1, mode: game.mode || 'CLASSIC', jokerCard,
+      const round = new Round({ gameId, roundNumber: game.currentRoundNumber + 1, revision: 1, mode: game.mode || 'CLASSIC', jokerCard,
         status: 'ACTIVE', potAmount: 0, potLimit: game.bootAmount * 100, currentBet: game.bootAmount, startingBet: game.bootAmount,
         currentTurnIndex: game.currentRoundNumber % order.length, startedAt: new Date(),
         players: game.turnOrder.map((userId, index) => ({ userId, cards: hands[index], status: 'ACTIVE', totalContribution: 0, seenCards: false })) });
-      for (const player of round.players) await charge(session, game, round, player, game.bootAmount, 'BOOT');
+      await chargeBoots(session, game, round);
       await round.save({ session });
       game.currentRoundNumber = round.roundNumber;
       await game.save({ session });
@@ -146,21 +182,34 @@ async function startRound(gameId, userId) {
       committedGame = game;
     });
   } finally { await session.endSession(); }
-  notify(gameId);
-  const round = await Round.populate(committedRound.toObject(), playerPopulation);
-  return roundViewWithBalance(round, committedGame, userId);
+  notify(committedRound);
+  return committedView(committedRound, committedGame, userId);
+}
+
+async function committedView(round, game, userId) {
+  // Reuse this transaction's wallet calculation, including any payout. Seeing
+  // cards needs no payment; load its wallet and public player names together.
+  const [populated, balance] = await Promise.all([
+    Round.populate(round.toObject(), playerPopulation),
+    round.$locals.balances?.get(idOf(userId)) ?? availableBalance(userId, null),
+  ]);
+  return roundViewWithBalance(populated, game, userId, balance);
 }
 
 const bet = (roundId, userId) => mutate(roundId, userId, async (session, round, game) => {
   const player = activeTurn(round, game, userId);
-  if (await charge(session, game, round, player, stake(round, player), 'BET')) return;
+  const completed = await charge(session, game, round, player, stake(round, player), 'BET');
+  player.lastBet = player.seenCards ? 'CHAAL' : 'BLIND';
+  if (completed) return;
   advance(round);
 });
 const betTwice = (roundId, userId) => mutate(roundId, userId, async (session, round, game) => {
   const player = activeTurn(round, game, userId);
   const raised = round.currentBet * 2;
   if (raised > round.startingBet * game.maxBetMultiplier) throw fail('Raise exceeds the table limit');
-  if (await charge(session, game, round, player, raised * (player.seenCards ? 2 : 1), 'BET_TWICE')) return;
+  const completed = await charge(session, game, round, player, raised * (player.seenCards ? 2 : 1), 'BET_TWICE');
+  player.lastBet = player.seenCards ? 'CHAAL' : 'BLIND';
+  if (completed) return;
   round.currentBet = raised;
   advance(round);
 });
@@ -171,13 +220,24 @@ const pack = (roundId, userId) => mutate(roundId, userId, async (session, round,
   if (remaining) await complete(session, round, remaining.userId, 'LAST_PLAYER');
   else advance(round);
 });
-const seeCards = (roundId, userId) => mutate(roundId, userId, async (_, round, game) => {
+async function seeCards(roundId, userId) {
+  const round = await Round.findById(roundId).select('+players.cards').lean();
+  if (!round) throw fail('Round not found', 404);
+  const game = await requireGameAccess(round.gameId, userId);
   if (game.status !== 'ACTIVE' || round.status !== 'ACTIVE') throw fail('Cards cannot be opened in this state');
   const player = round.players.find(p => idOf(p.userId) === idOf(userId));
   if (!player || player.status !== 'ACTIVE') throw fail('Only active players can open their cards', 403);
   if (player.cards?.length !== 3) throw fail('This older round has no digital cards. Finish it before dealing a new round.');
-  player.seenCards = true;
-});
+  // No money changes here. Patch only the viewer's seen flag and revision,
+  // atomically rechecking eligibility so packing/completion cannot be undone.
+  // Bets write this same round and retry their transaction on a conflicting reveal.
+  const updated = await Round.findOneAndUpdate({ _id: roundId, status: 'ACTIVE',
+    players: { $elemMatch: { userId, status: 'ACTIVE', cards: { $size: 3 } } },
+  }, { $set: { 'players.$.seenCards': true }, $inc: { revision: 1 } }, { new: true }).select('+players.cards');
+  if (!updated) throw fail('The round changed before your cards could be opened. Please retry.');
+  notify(updated);
+  return committedView(updated, game, userId);
+}
 const requestSideShow = (roundId, userId) => mutate(roundId, userId, async (session, round, game) => {
   const player = activeTurn(round, game, userId);
   if (round.players.filter(p => p.status === 'ACTIVE').length <= 2) throw fail('Side show requires at least three active players');
@@ -249,15 +309,20 @@ async function getRoundById(roundId, userId) {
 async function getCurrentRoundForGame(gameId, userId) {
   const game = await requireGameAccess(gameId, userId);
   if (game.currentRoundNumber === 0) return null;
-  const round = await readRound(Round.findOne({ gameId, roundNumber: game.currentRoundNumber }));
-  return round ? roundViewWithBalance(round, game, userId) : null;
+  // The authorized viewer's wallet and the populated round are independent.
+  // Other players receive turn updates without waiting for these reads in series.
+  const [round, balance] = await Promise.all([
+    readRound(Round.findOne({ gameId, roundNumber: game.currentRoundNumber })),
+    availableBalance(userId, null),
+  ]);
+  return round ? roundViewWithBalance(round, game, userId, balance) : null;
 }
 
-async function roundViewWithBalance(round, game, userId) {
+async function roundViewWithBalance(round, game, userId, balance) {
   await canAccessGame(game, userId);
   const view = roundForViewer(round, userId);
   if (!view.potLimit && round.players.every(p => p.cards?.length === 3)) view.potLimit = round.startingBet * 100;
-  view.availableBalance = await availableBalance(userId, null);
+  view.availableBalance = balance ?? await availableBalance(userId, null);
   return view;
 }
 module.exports = { startRound, bet, betTwice, pack, seeCards, requestSideShow, respondSideShow, submitSideShowResult, requestShow, submitShowResult, getRoundById, getCurrentRoundForGame };

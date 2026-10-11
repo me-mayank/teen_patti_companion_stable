@@ -32,15 +32,12 @@ const getGameHistoryForUser = async (userId) => {
 };
 
 const getGameById = async (gameId, userId) => {
-  await requireGameAccess(gameId, userId, true);
-  const game = await Game.findById(gameId)
-    .populate('createdBy', 'name username profilePicture')
-    .populate('participants.userId', 'name username profilePicture')
-    .populate('turnOrder', 'name username profilePicture');
-
-  if (!game) {
-    throw fail('Game not found');
-  }
+  const game = await requireGameAccess(gameId, userId, true);
+  await game.populate([
+    { path: 'createdBy', select: 'name username profilePicture' },
+    { path: 'participants.userId', select: 'name username profilePicture' },
+    { path: 'turnOrder', select: 'name username profilePicture' },
+  ]);
 
   return game;
 };

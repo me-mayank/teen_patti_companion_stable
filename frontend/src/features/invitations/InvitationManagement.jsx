@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import * as gamesApi from '../games/games.api';
 import * as invitationsApi from './invitations.api';
 import { useSocket } from '../../shared/hooks/useSocket';
+import { createRefreshScheduler } from '../../shared/hooks/refreshScheduler';
 import { useAuth } from '../auth/AuthContext';
 import { ArrowLeft, Users, Loader2, CheckCircle2, Clock, XCircle, Play, Send } from 'lucide-react';
 
@@ -16,6 +17,8 @@ const InvitationManagement = () => {
   const [invitations, setInvitations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [finalizing, setFinalizing] = useState(false);
+  const scheduler = useRef(null);
+  const live = useRef(false);
 
   const fetchLobbyData = useCallback(async () => {
     try {
@@ -35,18 +38,36 @@ const InvitationManagement = () => {
   }, [gameId, navigate]);
 
   useEffect(() => {
-    fetchLobbyData();
-    const timer = setInterval(fetchLobbyData, 10000);
-    return () => clearInterval(timer);
+    if (!document.hidden) fetchLobbyData();
+    const polling = createRefreshScheduler({ refresh: fetchLobbyData, isConnected: () => live.current });
+    scheduler.current = polling;
+    return () => polling.dispose();
   }, [fetchLobbyData]);
 
   useEffect(() => {
     if (!socket) return;
-    const join = () => { socket.emit('joinGame', gameId); fetchLobbyData(); };
+    let active = true, attempt = 0;
+    const connection = value => { live.current = value; scheduler.current?.reschedule(); };
+    const update = () => { if (!document.hidden) fetchLobbyData(); };
+    const join = () => {
+      const request = ++attempt;
+      connection(false);
+      socket.emit('joinGame', gameId, response => {
+        if (!active || request !== attempt) return;
+        connection(Boolean(response?.ok));
+        if (response?.ok) update();
+      });
+    };
+    const disconnect = () => { attempt++; connection(false); };
     socket.on('connect', join);
-    socket.on('game:update', fetchLobbyData);
+    socket.on('disconnect', disconnect); socket.on('connect_error', disconnect);
+    socket.on('game:update', update);
     if (socket.connected) join();
-    return () => { socket.emit('leaveGame', gameId); socket.off('connect', join); socket.off('game:update', fetchLobbyData); };
+    return () => {
+      active = false; live.current = false;
+      socket.emit('leaveGame', gameId); socket.off('connect', join); socket.off('game:update', update);
+      socket.off('disconnect', disconnect); socket.off('connect_error', disconnect);
+    };
   }, [socket, gameId, fetchLobbyData]);
 
   if (loading) {
