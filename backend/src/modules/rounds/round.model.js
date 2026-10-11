@@ -16,6 +16,9 @@ const roundSchema = new mongoose.Schema(
       enum: ['CREATED', 'ACTIVE', 'SIDE_SHOW_PENDING', 'SHOW_PENDING', 'COMPLETED'],
       default: 'CREATED',
     },
+    mode: { type: String, enum: ['CLASSIC', 'JOKER'], default: 'CLASSIC' },
+    jokerCard: { rank: Number, suit: String },
+    completionReason: { type: String, enum: ['LAST_PLAYER', 'SHOW'] },
     potAmount: {
       type: Number,
       default: 0,
@@ -37,12 +40,14 @@ const roundSchema = new mongoose.Schema(
         status: { type: String, enum: ['ACTIVE', 'PACKED', 'WINNER'], default: 'ACTIVE' },
         totalContribution: { type: Number, default: 0 },
         seenCards: { type: Boolean, default: false },
+        revealed: { type: Boolean, default: false },
+        cards: { type: [{ _id: false, rank: { type: Number, min: 2, max: 14 }, suit: { type: String, enum: ['S', 'H', 'D', 'C'] } }], select: false, default: undefined },
       },
     ],
     sideShowRequest: {
       requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       targetPlayer: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-      result: { type: String, enum: ['PENDING', 'ACCEPTED', 'REQUESTER_WON', 'TARGET_WON'] },
+      result: { type: String, enum: ['PENDING', 'ACCEPTED', 'REQUESTER_WON', 'TARGET_WON', 'DECLINED'] },
     },
     winnerId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -56,7 +61,7 @@ const roundSchema = new mongoose.Schema(
   }
 );
 
-roundSchema.index({ gameId: 1, roundNumber: 1 });
+roundSchema.index({ gameId: 1, roundNumber: 1 }, { unique: true });
 
 const Round = mongoose.model('Round', roundSchema);
 module.exports = Round;

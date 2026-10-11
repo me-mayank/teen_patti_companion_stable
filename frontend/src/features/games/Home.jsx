@@ -3,16 +3,18 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import * as gamesApi from './games.api';
 import * as invitationsApi from '../invitations/invitations.api';
-import { Plus, Play, History, Bell, LogOut, Loader2, Check, X, UserCircle, Info, Download } from 'lucide-react';
+import { Plus, Play, History, Bell, Loader2, Check, X, UserCircle, Info, Download } from 'lucide-react';
 import logo from '../../assets/logo.png';
 
 const Home = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [activeGames, setActiveGames] = useState([]);
   const [gameHistory, setGameHistory] = useState([]);
   const [pendingInvites, setPendingInvites] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [responding, setResponding] = useState(null);
   const [activeTab, setActiveTab] = useState('active'); // active or history
   
   const [showInfo, setShowInfo] = useState(false);
@@ -59,8 +61,9 @@ const Home = () => {
       setActiveGames(gamesData);
       setGameHistory(historyData);
       setPendingInvites(invitesData);
+      setError('');
     } catch (err) {
-      console.error(err);
+      setError(err.response?.data?.message || 'Could not load your games. Please retry.');
     } finally {
       setLoading(false);
     }
@@ -68,17 +71,21 @@ const Home = () => {
 
   useEffect(() => {
     loadData();
-    // In a real app, you might listen to socket events here to auto-refresh
+    const timer = setInterval(loadData, 10000);
+    return () => clearInterval(timer);
   }, []);
 
   const handleInviteResponse = async (invitationId, status) => {
+    if (responding) return;
+    setResponding(invitationId);
+    setError('');
     try {
       await invitationsApi.respondToInvite(invitationId, status);
       // Reload data to reflect changes (game might now be active)
-      loadData();
+      await loadData();
     } catch (err) {
-      console.error(err);
-    }
+      setError(err.response?.data?.message || 'The invitation could not be updated. Please retry.');
+    } finally { setResponding(null); }
   };
 
   if (loading) {
@@ -139,6 +146,7 @@ const Home = () => {
           </div>
         </div>
 
+        {error && <div role="alert" className="bg-red-500/10 text-red-400 p-4 rounded-xl mb-6 flex justify-between gap-4">{error}<button onClick={loadData} className="underline shrink-0">Retry</button></div>}
         {/* Mobile Install Button */}
         {!isStandalone && (
           <button 
@@ -166,12 +174,16 @@ const Home = () => {
                   </div>
                   <div className="flex gap-2">
                     <button 
+                      aria-label={`Accept invitation to ${invite.gameId?.name || 'game'}`}
+                      disabled={Boolean(responding)}
                       onClick={() => handleInviteResponse(invite._id, 'ACCEPTED')}
                       className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-all"
                     >
                       <Check className="w-5 h-5" />
                     </button>
                     <button 
+                      aria-label={`Decline invitation to ${invite.gameId?.name || 'game'}`}
+                      disabled={Boolean(responding)}
                       onClick={() => handleInviteResponse(invite._id, 'DECLINED')}
                       className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-all"
                     >
@@ -290,10 +302,10 @@ const Home = () => {
             </h2>
             <div className="text-slate-300 space-y-4">
               <p>
-                <strong>Teen Patti Companion</strong> is a premium digital ledger and game manager for your real-world, physical Teen Patti games.
+                <strong>Teen Patti Companion</strong> deals private cards and runs Classic or Joker Teen Patti games with your friends.
               </p>
               <p>
-                Instead of using poker chips or keeping track of money on paper, use this app to automatically track bets, pots, turn orders, side-shows, and end-of-game payouts.
+                Play blind or see your cards, raise the stake, pack, or request a show. Hands are compared automatically, and bets, pots, turn orders, and balances are recorded for you.
               </p>
               <ul className="list-disc pl-5 text-slate-400 space-y-1">
                 <li>Create games and invite friends</li>

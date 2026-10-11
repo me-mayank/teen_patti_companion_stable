@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import * as gamesApi from '../games/games.api';
 import * as invitationsApi from './invitations.api';
@@ -17,12 +17,14 @@ const InvitationManagement = () => {
   const [loading, setLoading] = useState(true);
   const [finalizing, setFinalizing] = useState(false);
 
-  const fetchLobbyData = async () => {
+  const fetchLobbyData = useCallback(async () => {
     try {
       const [gameData, invitesData] = await Promise.all([
         gamesApi.getGameById(gameId),
         invitationsApi.getGameInvitations(gameId)
       ]);
+      if (gameData.status === 'ACTIVE') { navigate(`/games/${gameId}/board`, { replace: true }); return; }
+      if (gameData.status === 'TURN_ORDER_SETUP') { navigate(`/games/${gameId}/turn-order`, { replace: true }); return; }
       setGame(gameData);
       setInvitations(invitesData);
     } catch (err) {
@@ -30,26 +32,22 @@ const InvitationManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [gameId, navigate]);
 
   useEffect(() => {
     fetchLobbyData();
-  }, [gameId]);
+    const timer = setInterval(fetchLobbyData, 10000);
+    return () => clearInterval(timer);
+  }, [fetchLobbyData]);
 
   useEffect(() => {
-    if (socket) {
-      socket.emit('joinGame', gameId);
-      
-      socket.on('game:update', () => {
-        // Someone responded to an invite, fetch fresh data
-        fetchLobbyData();
-      });
-
-      return () => {
-        socket.off('game:update');
-      };
-    }
-  }, [socket, gameId]);
+    if (!socket) return;
+    const join = () => { socket.emit('joinGame', gameId); fetchLobbyData(); };
+    socket.on('connect', join);
+    socket.on('game:update', fetchLobbyData);
+    if (socket.connected) join();
+    return () => { socket.emit('leaveGame', gameId); socket.off('connect', join); socket.off('game:update', fetchLobbyData); };
+  }, [socket, gameId, fetchLobbyData]);
 
   if (loading) {
     return (

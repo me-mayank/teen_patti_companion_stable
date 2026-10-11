@@ -1,512 +1,209 @@
 const mongoose = require('mongoose');
 const Round = require('./round.model');
 const Game = require('../games/game.model');
-const { recordTransaction } = require('../ledger/ledger.service');
-const turnManager = require('./turnManager.service');
-const { getIO } = require('../../shared/sockets');
-
-const _emitUpdate = async (gameId) => {
-  try {
-    const game = await Game.findById(gameId)
-      .populate('createdBy', 'name username profilePicture')
-      .populate('participants.userId', 'name username profilePicture')
-      .populate('turnOrder', 'name username profilePicture');
-
-    let round = null;
-    if (game && game.currentRoundNumber > 0) {
-      round = await Round.findOne({ gameId, roundNumber: game.currentRoundNumber })
-        .populate('players.userId', 'name username profilePicture')
-        .populate('winnerId', 'name username profilePicture');
-    }
-
-    const payload = { gameId, game, round };
-    getIO().to(`game:${gameId}`).emit('game:update', payload);
-    getIO().to(`game:${gameId}`).emit('round:update', payload);
-  } catch (err) {
-    console.error('Error emitting populated update:', err);
-    getIO().to(`game:${gameId}`).emit('game:update', { gameId });
-    getIO().to(`game:${gameId}`).emit('round:update', { gameId });
-  }
-};
-
 const User = require('../users/user.model');
+const { recordTransaction } = require('../ledger/ledger.service');
+const turns = require('./turnManager.service');
+const { getIO } = require('../../shared/sockets');
+const { dealCards, compareHands } = require('../cards/cards.service');
+const { roundForViewer, idOf } = require('./round.view');
+const { fail, canAccessGame } = require('../../shared/middleware/gameAccess.middleware');
 
-const _checkBalance = async (game, userId, amountRequired, session) => {
-  const participant = game.participants.find(p => p.userId.toString() === userId.toString());
-  if (!participant) throw new Error('Participant not found');
+// Notifications only invalidate state. Private hands are fetched through authenticated HTTP.
+function notify(gameId) {
+  try { getIO().to(`game:${gameId}`).emit('round:update', { gameId: idOf(gameId) }); }
+  catch (error) { console.error('Round notification failed:', error.message); }
+}
 
+async function availableBalance(userId, session) {
   const user = await User.findById(userId).session(session);
-  if (!user) throw new Error('User not found');
+  if (!user) throw fail('Player not found', 404);
+  const games = await Game.find({ 'participants.userId': userId, status: { $nin: ['ENDED', 'ARCHIVED'] } }).session(session);
+  return user.globalBalance + games.reduce((sum, game) => sum + (game.participants.find(p => idOf(p.userId) === idOf(userId))?.balance || 0), 0);
+}
 
-  const availableBalance = user.globalBalance + participant.balance;
-  if (availableBalance < amountRequired) {
-    const err = new Error(`Insufficient wallet balance. Required: ₹${amountRequired}, Available: ₹${availableBalance}`);
-    err.statusCode = 400;
-    throw err;
-  }
-};
+async function charge(session, game, round, player, amount, type) {
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw fail('Invalid bet amount');
+  // All wallet spending uses the same user write, so concurrent tables conflict and retry.
+  await User.updateOne({ _id: player.userId }, { $inc: { __v: 1 } }, { session });
+  const balance = await availableBalance(player.userId, session);
+  if (balance < amount) throw fail(`Insufficient balance. Required: ₹${amount}, available: ₹${balance}`);
+  await recordTransaction(session, { userId: player.userId, gameId: game._id, roundId: round._id, type, amount: -amount });
+  player.totalContribution += amount;
+  round.potAmount += amount;
+}
 
-const startRound = async (gameId, userId) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const game = await Game.findById(gameId).session(session);
-    if (!game) throw new Error('Game not found');
-
-    if (game.status !== 'ACTIVE') {
-      throw new Error('Game must be ACTIVE to start a round');
-    }
-
-    // Verify previous round is COMPLETED if it exists
-    if (game.currentRoundNumber > 0) {
-      const prevRound = await Round.findOne({ gameId, roundNumber: game.currentRoundNumber }).session(session);
-      if (prevRound && prevRound.status !== 'COMPLETED') {
-        throw new Error('Previous round is not completed');
-      }
-    }
-
-    const roundNumber = game.currentRoundNumber + 1;
-    const bootAmount = game.bootAmount;
-
-    // Check balance for all players
-    for (const uId of game.turnOrder) {
-      await _checkBalance(game, uId, bootAmount, session);
-    }
-
-    // Create Round players array from game.turnOrder
-    const players = game.turnOrder.map(uId => ({
-      userId: uId,
-      status: 'ACTIVE',
-      totalContribution: bootAmount,
-      seenCards: false,
-    }));
-
-    const round = new Round({
-      gameId,
-      roundNumber,
-      status: 'ACTIVE',
-      potAmount: players.length * bootAmount,
-      currentBet: bootAmount,
-      startingBet: bootAmount,
-      currentTurnIndex: 0,
-      players,
-      startedAt: new Date(),
-    });
-
-    await round.save({ session });
-
-    // Deduct boot amount from each player using ledger service
-    for (const player of players) {
-      await recordTransaction(session, {
-        userId: player.userId,
-        gameId,
-        roundId: round._id,
-        type: 'BOOT',
-        amount: -bootAmount,
-      });
-    }
-
-    game.currentRoundNumber = roundNumber;
-    await game.save({ session });
-
-    await session.commitTransaction();
-    _emitUpdate(gameId);
-    return round;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
-};
-
-const _validateAction = (round, game, userId) => {
-  if (game.status !== 'ACTIVE') throw new Error('Game is not active');
-  if (round.status !== 'ACTIVE' && round.status !== 'SIDE_SHOW_PENDING' && round.status !== 'SHOW_PENDING') {
-    throw new Error('Round is not active');
-  }
-  
-  const currentPlayer = round.players[round.currentTurnIndex];
-  if (currentPlayer.userId.toString() !== userId.toString()) {
-    throw new Error('It is not your turn');
-  }
-  if (currentPlayer.status !== 'ACTIVE') {
-    throw new Error('You are not active in this round');
-  }
-  
-  return currentPlayer;
-};
-
-const _completeRound = async (session, round, winnerId) => {
+async function complete(session, round, winnerId, reason) {
   round.status = 'COMPLETED';
   round.winnerId = winnerId;
+  round.completionReason = reason;
   round.endedAt = new Date();
+  const winner = round.players.find(p => idOf(p.userId) === idOf(winnerId));
+  winner.status = 'WINNER';
+  await recordTransaction(session, { userId: winnerId, gameId: round.gameId, roundId: round._id, type: 'ROUND_WIN', amount: round.potAmount });
+}
 
-  const winnerPlayer = round.players.find(p => p.userId.toString() === winnerId.toString());
-  if (winnerPlayer) winnerPlayer.status = 'WINNER';
+function activeTurn(round, game, userId) {
+  if (game.status !== 'ACTIVE' || round.status !== 'ACTIVE') throw fail('The round is not accepting actions');
+  const player = round.players[round.currentTurnIndex];
+  if (!player || idOf(player.userId) !== idOf(userId)) throw fail('It is not your turn', 403);
+  if (player.status !== 'ACTIVE') throw fail('You have already packed');
+  return player;
+}
+function advance(round) {
+  const next = turns.getNextActivePlayerIndex(round.players, round.currentTurnIndex);
+  if (next === null) throw fail('No active players remain');
+  round.currentTurnIndex = next;
+}
+const stake = (round, player) => round.currentBet * (player.seenCards ? 2 : 1);
 
-  await round.save({ session });
-
-  await recordTransaction(session, {
-    userId: winnerId,
-    gameId: round.gameId,
-    roundId: round._id,
-    type: 'ROUND_WIN',
-    amount: round.potAmount,
-  });
-
-  const { getIO } = require('../../shared/sockets');
-  getIO().to(`game:${round.gameId}`).emit('round:completed', { roundId: round._id });
-};
-
-const bet = async (roundId, userId) => {
+async function mutate(roundId, userId, action) {
   const session = await mongoose.startSession();
-  session.startTransaction();
+  let gameId;
   try {
-    const round = await Round.findById(roundId).session(session);
-    if (!round) throw new Error('Round not found');
-    const game = await Game.findById(round.gameId).session(session);
-
-    const currentPlayer = _validateAction(round, game, userId);
-    if (round.status !== 'ACTIVE') throw new Error('Round is not in ACTIVE state');
-
-    const betAmount = round.currentBet;
-    await _checkBalance(game, userId, betAmount, session);
-    
-    round.potAmount += betAmount;
-    currentPlayer.totalContribution += betAmount;
-
-    await recordTransaction(session, {
-      userId,
-      gameId: game._id,
-      roundId: round._id,
-      type: 'BET',
-      amount: -betAmount,
-    });
-
-    const nextIndex = turnManager.getNextActivePlayerIndex(round.players, round.currentTurnIndex);
-    if (nextIndex === null) throw new Error('No active players found');
-    
-    round.currentTurnIndex = nextIndex;
-    await round.save({ session });
-    
-    await session.commitTransaction();
-    _emitUpdate(game._id);
-    return round;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
-};
-
-const betTwice = async (roundId, userId) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const round = await Round.findById(roundId).session(session);
-    if (!round) throw new Error('Round not found');
-    const game = await Game.findById(round.gameId).session(session);
-
-    const currentPlayer = _validateAction(round, game, userId);
-    if (round.status !== 'ACTIVE') throw new Error('Round is not in ACTIVE state');
-
-    const newBet = round.currentBet * 2;
-    if (newBet > round.startingBet * game.maxBetMultiplier) {
-      const err = new Error('Bet exceeds max bet limit');
-      err.statusCode = 400;
-      throw err;
-    }
-    
-    await _checkBalance(game, userId, newBet, session);
-
-    round.currentBet = newBet;
-    round.potAmount += newBet;
-    currentPlayer.totalContribution += newBet;
-
-    await recordTransaction(session, {
-      userId,
-      gameId: game._id,
-      roundId: round._id,
-      type: 'BET_TWICE',
-      amount: -newBet,
-    });
-
-    const nextIndex = turnManager.getNextActivePlayerIndex(round.players, round.currentTurnIndex);
-    round.currentTurnIndex = nextIndex;
-    await round.save({ session });
-    
-    await session.commitTransaction();
-    _emitUpdate(game._id);
-    return round;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
-};
-
-const pack = async (roundId, userId) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const round = await Round.findById(roundId).session(session);
-    if (!round) throw new Error('Round not found');
-    const game = await Game.findById(round.gameId).session(session);
-
-    const currentPlayer = _validateAction(round, game, userId);
-    if (round.status !== 'ACTIVE') throw new Error('Round is not in ACTIVE state');
-
-    currentPlayer.status = 'PACKED';
-
-    const winner = turnManager.checkOnePlayerRemaining(round.players);
-    if (winner) {
-      await _completeRound(session, round, winner.userId);
-    } else {
-      const nextIndex = turnManager.getNextActivePlayerIndex(round.players, round.currentTurnIndex);
-      round.currentTurnIndex = nextIndex;
+    await session.withTransaction(async () => {
+      const round = await Round.findById(roundId).select('+players.cards').session(session);
+      if (!round) throw fail('Round not found', 404);
+      const game = await Game.findById(round.gameId).session(session);
+      await canAccessGame(game, userId);
+      gameId = game._id;
+      await action(session, round, game);
       await round.save({ session });
-    }
-
-    await session.commitTransaction();
-    _emitUpdate(game._id);
-    return round;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
-};
-
-const requestSideShow = async (roundId, userId) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const round = await Round.findById(roundId).session(session);
-    const game = await Game.findById(round.gameId).session(session);
-    _validateAction(round, game, userId);
-
-    const activePlayers = round.players.filter(p => p.status === 'ACTIVE');
-    if (activePlayers.length <= 2) {
-      throw new Error('Side show requires more than 2 active players');
-    }
-
-    const prevIndex = turnManager.getPreviousActivePlayerIndex(round.players, round.currentTurnIndex);
-    if (prevIndex === null) throw new Error('Could not find previous active player');
-    const targetUserId = round.players[prevIndex].userId;
-
-    const betAmount = round.currentBet;
-
-    // Record side show fee
-    await recordTransaction(session, {
-      userId,
-      gameId: game._id,
-      roundId: round._id,
-      type: 'BET',
-      amount: -betAmount,
     });
+  } finally { await session.endSession(); }
+  notify(gameId);
+  return getRoundById(roundId, userId);
+}
 
-    await _checkBalance(game, userId, betAmount, session);
-    round.potAmount += betAmount;
-    
-    // Enter pending state, DO NOT advance turn yet
-    round.status = 'SIDE_SHOW_PENDING';
-    round.sideShowRequest = {
-      requestedBy: userId,
-      targetPlayer: targetUserId,
-      result: 'PENDING'
-    };
-    
-    await round.save({ session });
-    await session.commitTransaction();
-    
-    _emitUpdate(game._id);
-    return round;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
-};
-
-const respondSideShow = async (roundId, userId, accept) => {
+async function startRound(gameId, userId) {
   const session = await mongoose.startSession();
-  session.startTransaction();
+  let roundId;
   try {
-    const round = await Round.findById(roundId).session(session);
-    if (round.status !== 'SIDE_SHOW_PENDING') throw new Error('No side show pending');
-    
-    const request = round.sideShowRequest;
-    if (request.targetPlayer.toString() !== userId.toString()) {
-      throw new Error('You are not the target of this side show');
-    }
-
-    if (!accept) {
-      // Declined, turn advances
-      round.status = 'ACTIVE';
-      round.sideShowRequest = null;
-      const nextIndex = turnManager.getNextActivePlayerIndex(round.players, round.currentTurnIndex);
-      round.currentTurnIndex = nextIndex;
+    await session.withTransaction(async () => {
+      const game = await Game.findById(gameId).session(session);
+      if (!game) throw fail('Game not found', 404);
+      if (idOf(game.createdBy) !== idOf(userId)) throw fail('Only the host can deal a round', 403);
+      if (game.status !== 'ACTIVE') throw fail('Start the game before dealing cards');
+      if (game.currentRoundNumber > 0) {
+        const previous = await Round.findOne({ gameId, roundNumber: game.currentRoundNumber }).session(session);
+        if (!previous || previous.status !== 'COMPLETED') throw fail('Finish the current round before dealing again');
+      }
+      const participantIds = game.participants.map(p => idOf(p.userId));
+      const order = game.turnOrder.map(idOf);
+      if (order.length < 2 || order.length > 6 || new Set(order).size !== order.length || order.length !== participantIds.length || order.some(id => !participantIds.includes(id))) throw fail('Set a valid turn order for 2 to 6 players');
+      const { hands, jokerCard } = dealCards(order.length, game.mode || 'CLASSIC');
+      const round = new Round({ gameId, roundNumber: game.currentRoundNumber + 1, mode: game.mode || 'CLASSIC', jokerCard,
+        status: 'ACTIVE', potAmount: 0, currentBet: game.bootAmount, startingBet: game.bootAmount,
+        currentTurnIndex: game.currentRoundNumber % order.length, startedAt: new Date(),
+        players: game.turnOrder.map((userId, index) => ({ userId, cards: hands[index], status: 'ACTIVE', totalContribution: 0, seenCards: false })) });
+      for (const player of round.players) await charge(session, game, round, player, game.bootAmount, 'BOOT');
       await round.save({ session });
-      await session.commitTransaction();
-      _emitUpdate(round.gameId);
-      return round;
-    }
-
-    // Accepted, waiting for result to be posted
-    request.result = 'ACCEPTED';
-    await round.save({ session });
-    await session.commitTransaction();
-    _emitUpdate(round.gameId);
-    return round;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
-};
-
-const submitSideShowResult = async (roundId, userId, loserUserId) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const round = await Round.findById(roundId).session(session);
-    if (round.status !== 'SIDE_SHOW_PENDING' || round.sideShowRequest?.result !== 'ACCEPTED') {
-      throw new Error('Invalid side show state');
-    }
-
-    const request = round.sideShowRequest;
-    const reqBy = request.requestedBy.toString();
-    const tgt = request.targetPlayer.toString();
-    
-    if (userId.toString() !== reqBy && userId.toString() !== tgt) {
-      throw new Error('Only participants can submit result');
-    }
-    
-    if (loserUserId.toString() !== reqBy && loserUserId.toString() !== tgt) {
-      throw new Error('Loser must be one of the players involved in the side show');
-    }
-
-    const loser = round.players.find(p => p.userId.toString() === loserUserId.toString());
-    if (!loser) throw new Error('Loser not found');
-
-    loser.status = 'PACKED';
-    round.status = 'ACTIVE';
-    round.sideShowRequest = null;
-
-    const winner = turnManager.checkOnePlayerRemaining(round.players);
-    if (winner) {
-      await _completeRound(session, round, winner.userId);
-    } else {
-      const nextIndex = turnManager.getNextActivePlayerIndex(round.players, round.currentTurnIndex);
-      round.currentTurnIndex = nextIndex;
-      await round.save({ session });
-    }
-
-    await session.commitTransaction();
-    _emitUpdate(round.gameId);
-    return round;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
-};
-
-const requestShow = async (roundId, userId) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const round = await Round.findById(roundId).session(session);
-    if (!round) throw new Error('Round not found');
-    const game = await Game.findById(round.gameId).session(session);
-
-    const currentPlayer = _validateAction(round, game, userId);
-
-    const activePlayers = round.players.filter(p => p.status === 'ACTIVE');
-    if (activePlayers.length !== 2) {
-      throw new Error('Show can only be requested when exactly 2 active players remain');
-    }
-
-    const betAmount = round.currentBet;
-    await _checkBalance(game, userId, betAmount, session);
-    round.potAmount += betAmount;
-    currentPlayer.totalContribution += betAmount;
-
-    await recordTransaction(session, {
-      userId,
-      gameId: game._id,
-      roundId: round._id,
-      type: 'SHOW_FEE',
-      amount: -betAmount,
-      description: `Paid ₹${betAmount} for Show`
+      game.currentRoundNumber = round.roundNumber;
+      await game.save({ session });
+      roundId = round._id;
     });
+  } finally { await session.endSession(); }
+  notify(gameId);
+  return getRoundById(roundId, userId);
+}
 
-    round.status = 'SHOW_PENDING';
-    await round.save({ session });
-    
-    await session.commitTransaction();
-    session.endSession();
-    
-    _emitUpdate(game._id);
-    return round;
-  } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-    throw err;
-  }
-};
+const bet = (roundId, userId) => mutate(roundId, userId, async (session, round, game) => {
+  const player = activeTurn(round, game, userId);
+  await charge(session, game, round, player, stake(round, player), 'BET');
+  advance(round);
+});
+const betTwice = (roundId, userId) => mutate(roundId, userId, async (session, round, game) => {
+  const player = activeTurn(round, game, userId);
+  const raised = round.currentBet * 2;
+  if (raised > round.startingBet * game.maxBetMultiplier) throw fail('Raise exceeds the table limit');
+  await charge(session, game, round, player, raised * (player.seenCards ? 2 : 1), 'BET_TWICE');
+  round.currentBet = raised;
+  advance(round);
+});
+const pack = (roundId, userId) => mutate(roundId, userId, async (session, round, game) => {
+  const player = activeTurn(round, game, userId);
+  player.status = 'PACKED';
+  const remaining = turns.checkOnePlayerRemaining(round.players);
+  if (remaining) await complete(session, round, remaining.userId, 'LAST_PLAYER');
+  else advance(round);
+});
+const seeCards = (roundId, userId) => mutate(roundId, userId, async (_, round, game) => {
+  if (game.status !== 'ACTIVE' || round.status !== 'ACTIVE') throw fail('Cards cannot be opened in this state');
+  const player = round.players.find(p => idOf(p.userId) === idOf(userId));
+  if (!player || player.status !== 'ACTIVE') throw fail('Only active players can open their cards', 403);
+  if (player.cards?.length !== 3) throw fail('This older round has no digital cards. Finish it before dealing a new round.');
+  player.seenCards = true;
+});
+const requestSideShow = (roundId, userId) => mutate(roundId, userId, async (session, round, game) => {
+  const player = activeTurn(round, game, userId);
+  if (round.players.filter(p => p.status === 'ACTIVE').length <= 2) throw fail('Side show requires at least three active players');
+  const target = round.players[turns.getPreviousActivePlayerIndex(round.players, round.currentTurnIndex)];
+  if (!player.seenCards || !target.seenCards) throw fail('You and the previous active player must both have seen your cards');
+  await charge(session, game, round, player, stake(round, player), 'SHOW_FEE');
+  round.status = 'SIDE_SHOW_PENDING';
+  round.sideShowRequest = { requestedBy: userId, targetPlayer: target.userId, result: 'PENDING' };
+});
+const respondSideShow = (roundId, userId, accept) => mutate(roundId, userId, async (_, round, game) => {
+  if (game.status !== 'ACTIVE' || round.status !== 'SIDE_SHOW_PENDING' || round.sideShowRequest?.result !== 'PENDING') throw fail('No side show is waiting for a response');
+  const request = round.sideShowRequest;
+  if (idOf(request.targetPlayer) !== idOf(userId)) throw fail('Only the requested player can respond', 403);
+  if (accept) {
+    const requester = round.players.find(p => idOf(p.userId) === idOf(request.requestedBy));
+    const target = round.players.find(p => idOf(p.userId) === idOf(request.targetPlayer));
+    if (requester.cards?.length !== 3 || target.cards?.length !== 3) {
+      request.result = 'ACCEPTED'; // Compatibility for rounds dealt before this release.
+      return;
+    }
+    const loser = compareHands(requester.cards, target.cards, round.jokerCard?.rank) > 0 ? target : requester;
+    loser.status = 'PACKED'; // Equal hands: the requesting player loses.
+    request.result = loser === target ? 'REQUESTER_WON' : 'TARGET_WON';
+  } else request.result = 'DECLINED';
+  round.status = 'ACTIVE';
+  advance(round);
+});
+const requestShow = (roundId, userId) => mutate(roundId, userId, async (session, round, game) => {
+  const player = activeTurn(round, game, userId);
+  const active = round.players.filter(p => p.status === 'ACTIVE');
+  if (active.length !== 2) throw fail('Show requires exactly two active players');
+  const other = active.find(p => idOf(p.userId) !== idOf(userId));
+  if (player.seenCards && !other.seenCards) throw fail('A seen player cannot request a show against a blind player');
+  await charge(session, game, round, player, stake(round, player), 'SHOW_FEE');
+  if (active.some(p => p.cards?.length !== 3)) { round.status = 'SHOW_PENDING'; return; }
+  active.forEach(p => { p.revealed = true; });
+  const winner = compareHands(player.cards, other.cards, round.jokerCard?.rank) > 0 ? player : other;
+  const loser = winner === player ? other : player;
+  loser.status = 'PACKED';
+  await complete(session, round, winner.userId, 'SHOW');
+});
 
-const submitShowResult = async (roundId, userId, winnerUserId) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const round = await Round.findById(roundId).session(session);
-    if (round.status !== 'SHOW_PENDING') throw new Error('No show pending');
-    
-    const activePlayers = round.players.filter(p => p.status === 'ACTIVE');
-    const isValidWinner = activePlayers.some(p => p.userId.toString() === winnerUserId);
-    if (!isValidWinner) throw new Error('Winner must be an active player');
-
-    // the loser gets packed (optional, since round ends anyway)
-    activePlayers.forEach(p => {
-      if (p.userId.toString() !== winnerUserId) p.status = 'PACKED';
-    });
-
-    await _completeRound(session, round, winnerUserId);
-    
-    await session.commitTransaction();
-    _emitUpdate(round.gameId);
-    return round;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
-};
-
-const getRoundById = async (roundId) => {
-  return await Round.findById(roundId)
-    .populate('players.userId', 'name username profilePicture')
-    .populate('winnerId', 'name username profilePicture');
-};
-
-module.exports = {
-  startRound,
-  bet,
-  betTwice,
-  pack,
-  requestSideShow,
-  respondSideShow,
-  submitSideShowResult,
-  requestShow,
-  submitShowResult,
-  getRoundById,
-};
+// Manual results are restricted to legacy physical-card rounds.
+const submitShowResult = (roundId, userId, winnerId) => mutate(roundId, userId, async (session, round, game) => {
+  if (idOf(game.createdBy) !== idOf(userId)) throw fail('Only the host can resolve a legacy show', 403);
+  if (round.status !== 'SHOW_PENDING' || round.players.some(p => p.cards?.length)) throw fail('Digital hands are compared automatically');
+  const active = round.players.filter(p => p.status === 'ACTIVE');
+  if (!active.some(p => idOf(p.userId) === idOf(winnerId))) throw fail('Choose an active player');
+  active.forEach(p => { if (idOf(p.userId) !== idOf(winnerId)) p.status = 'PACKED'; });
+  await complete(session, round, winnerId, 'SHOW');
+});
+const submitSideShowResult = (roundId, userId, loserId) => mutate(roundId, userId, async (_, round) => {
+  const request = round.sideShowRequest;
+  if (round.status !== 'SIDE_SHOW_PENDING' || request?.result !== 'ACCEPTED' || round.players.some(p => p.cards?.length)) throw fail('Digital hands are compared automatically');
+  const involved = [idOf(request.requestedBy), idOf(request.targetPlayer)];
+  if (!involved.includes(idOf(userId))) throw fail('Only side show participants can resolve this legacy round', 403);
+  if (!involved.includes(idOf(loserId))) throw fail('Choose a side show participant');
+  round.players.find(p => idOf(p.userId) === idOf(loserId)).status = 'PACKED';
+  round.sideShowRequest = null;
+  round.status = 'ACTIVE';
+  advance(round);
+});
+async function getRoundById(roundId, userId) {
+  const round = await Round.findById(roundId).select('+players.cards')
+    .populate('players.userId', 'name username profilePicture').populate('winnerId', 'name username profilePicture');
+  if (!round) throw fail('Round not found', 404);
+  const game = await Game.findById(round.gameId);
+  await canAccessGame(game, userId);
+  const view = roundForViewer(round, userId);
+  view.availableBalance = await availableBalance(userId, null);
+  return view;
+}
+module.exports = { startRound, bet, betTwice, pack, seeCards, requestSideShow, respondSideShow, submitSideShowResult, requestShow, submitShowResult, getRoundById };

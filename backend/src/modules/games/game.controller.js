@@ -39,7 +39,7 @@ const getGameHistory = asyncHandler(async (req, res) => {
 // @route   GET /api/games/:id
 // @access  Private
 const getGameById = asyncHandler(async (req, res) => {
-  const game = await gameService.getGameById(req.params.id);
+  const game = await gameService.getGameById(req.params.id, req.user._id);
   // Optional: Add check to ensure user is part of the game or creator or invited
   res.json(game);
 });
@@ -48,10 +48,7 @@ const getGameById = asyncHandler(async (req, res) => {
 // @route   GET /api/games/:id/rounds/current
 // @access  Private
 const getCurrentRound = asyncHandler(async (req, res) => {
-  const round = await gameService.getCurrentRoundForGame(req.params.id);
-  if (!round) {
-    return res.status(404).json({ message: 'No active round found' });
-  }
+  const round = await gameService.getCurrentRoundForGame(req.params.id, req.user._id);
   res.json(round);
 });
 

@@ -77,11 +77,16 @@ const submitShowResult = asyncHandler(async (req, res) => {
 // @route   GET /api/rounds/:id
 // @access  Private
 const getRound = asyncHandler(async (req, res) => {
-  const round = await roundService.getRoundById(req.params.id);
+  const round = await roundService.getRoundById(req.params.id, req.user._id);
   res.json(round);
 });
 
+const seeCards = asyncHandler(async (req, res) => {
+  res.json(await roundService.seeCards(req.params.id, req.user._id));
+});
+
 module.exports = {
+  seeCards,
   startRound,
   bet,
   betTwice,

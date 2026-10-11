@@ -29,7 +29,7 @@ const changeUsername = asyncHandler(async (req, res) => {
     name: user.name,
     username: user.username,
     email: user.email,
-    balance: user.balance,
+    globalBalance: user.globalBalance,
     profilePicture: user.profilePicture,
   });
 });
@@ -46,7 +46,7 @@ const updateProfilePicture = asyncHandler(async (req, res) => {
     name: user.name,
     username: user.username,
     email: user.email,
-    balance: user.balance,
+    globalBalance: user.globalBalance,
     profilePicture: user.profilePicture,
   });
 });

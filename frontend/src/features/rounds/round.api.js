@@ -49,3 +49,8 @@ export const submitShowResult = async (roundId, winnerUserId) => {
   const response = await axiosClient.post(`/rounds/${roundId}/show/result`, { winnerUserId });
   return response.data;
 };
+
+export const seeCards = async (roundId) => {
+  const response = await axiosClient.post(`/rounds/${roundId}/see-cards`);
+  return response.data;
+};

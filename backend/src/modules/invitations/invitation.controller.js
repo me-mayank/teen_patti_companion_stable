@@ -1,5 +1,6 @@
 const asyncHandler = require('../../shared/utils/asyncHandler');
 const invitationService = require('./invitation.service');
+const { requireGameAccess } = require('../../shared/middleware/gameAccess.middleware');
 
 // @desc    Invite players to a game
 // @route   POST /api/games/:id/invitations
@@ -17,6 +18,7 @@ const invitePlayers = asyncHandler(async (req, res) => {
 // @route   GET /api/games/:id/invitations
 // @access  Private
 const getGameInvitations = asyncHandler(async (req, res) => {
+  await requireGameAccess(req.params.id, req.user._id, true);
   const invitations = await invitationService.getInvitationsByGameId(
     req.params.id
   );

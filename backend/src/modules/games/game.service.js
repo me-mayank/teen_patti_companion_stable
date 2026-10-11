@@ -2,27 +2,10 @@ const mongoose = require('mongoose');
 const Game = require('./game.model');
 const { getIO } = require('../../shared/sockets');
 
-const _emitUpdate = async (gameId) => {
-  try {
-    const game = await Game.findById(gameId)
-      .populate('createdBy', 'name username profilePicture')
-      .populate('participants.userId', 'name username profilePicture')
-      .populate('turnOrder', 'name username profilePicture');
-
-    const Round = require('../rounds/round.model');
-    let round = null;
-    if (game && game.currentRoundNumber > 0) {
-      round = await Round.findOne({ gameId, roundNumber: game.currentRoundNumber })
-        .populate('players.userId', 'name username profilePicture')
-        .populate('winnerId', 'name username profilePicture');
-    }
-
-    const payload = { gameId, game, round };
-    getIO().to(`game:${gameId}`).emit('game:update', payload);
-  } catch (err) {
-    console.error('Error emitting populated game update:', err);
-    getIO().to(`game:${gameId}`).emit('game:update', { gameId });
-  }
+const { requireGameAccess, fail } = require('../../shared/middleware/gameAccess.middleware');
+const _emitUpdate = (gameId) => {
+  try { getIO().to(`game:${gameId}`).emit('game:update', { gameId }); }
+  catch (error) { console.error('Game notification failed:', error.message); }
 };
 
 const createGame = async (gameData) => {
@@ -48,157 +31,86 @@ const getGameHistoryForUser = async (userId) => {
     .sort('-createdAt');
 };
 
-const getGameById = async (gameId) => {
+const getGameById = async (gameId, userId) => {
+  await requireGameAccess(gameId, userId, true);
   const game = await Game.findById(gameId)
     .populate('createdBy', 'name username profilePicture')
     .populate('participants.userId', 'name username profilePicture')
     .populate('turnOrder', 'name username profilePicture');
 
   if (!game) {
-    throw new Error('Game not found');
+    throw fail('Game not found');
   }
 
   return game;
 };
 
-const getCurrentRoundForGame = async (gameId) => {
-  const game = await Game.findById(gameId);
-  if (!game) throw new Error('Game not found');
-
+const getCurrentRoundForGame = async (gameId, userId) => {
+  const game = await requireGameAccess(gameId, userId);
   if (game.currentRoundNumber === 0) return null;
-
   const Round = require('../rounds/round.model');
-  const round = await Round.findOne({ gameId, roundNumber: game.currentRoundNumber })
-    .populate('players.userId', 'name username profilePicture')
-    .populate('winnerId', 'name username profilePicture');
-    
-  return round;
+  const round = await Round.findOne({ gameId, roundNumber: game.currentRoundNumber });
+  if (!round) return null;
+  return require('../rounds/round.service').getRoundById(round._id, userId);
 };
 
-const finalizePlayers = async (gameId, userId) => {
-  const game = await Game.findById(gameId);
-  if (!game) throw new Error('Game not found');
-  
-  if (game.createdBy.toString() !== userId.toString()) {
-    throw new Error('Only the creator can finalize players');
-  }
-
-  if (game.participants.length < 2) {
-    throw new Error('Need at least 2 accepted players to finalize (including creator)');
-  }
-
+async function configure(gameId, userId, update) {
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const game = await Game.findById(gameId).session(session);
+      if (!game) throw fail('Game not found', 404);
+      if (game.createdBy.toString() !== userId.toString()) throw fail('Only the host can configure the table', 403);
+      await update(game, session);
+      game.increment();
+      await game.save({ session });
+    });
+  } finally { await session.endSession(); }
+  _emitUpdate(gameId);
+  return getGameById(gameId, userId);
+}
+const finalizePlayers = (gameId, userId) => configure(gameId, userId, async (game, session) => {
+  if (!['CREATED', 'WAITING_FOR_PLAYERS'].includes(game.status)) throw fail('Players have already been finalized');
+  if (game.participants.length < 2 || game.participants.length > 6) throw fail('The table needs 2 to 6 accepted players, including the host');
   game.status = 'TURN_ORDER_SETUP';
-  await game.save();
-  
-  _emitUpdate(gameId);
-  
-  return game;
-};
-
-const setTurnOrder = async (gameId, orderedUserIds, userId) => {
-  const game = await Game.findById(gameId);
-  if (!game) throw new Error('Game not found');
-  
-  if (game.createdBy.toString() !== userId.toString()) {
-    throw new Error('Only the creator can set turn order');
-  }
-
-  if (game.status !== 'TURN_ORDER_SETUP') {
-    throw new Error('Game is not in TURN_ORDER_SETUP state');
-  }
-
-  // Ensure all orderedUserIds are in the participants list
-  const participantIds = game.participants.map(p => p.userId.toString());
-  const allValid = orderedUserIds.every(id => participantIds.includes(id));
-  
-  if (!allValid || orderedUserIds.length !== participantIds.length) {
-    throw new Error('Turn order must contain exactly the finalized participants');
-  }
-
+  const Invitation = require('../invitations/invitation.model');
+  await Invitation.updateMany({ gameId, status: 'PENDING' }, { $set: { status: 'DECLINED', respondedAt: new Date() } }, { session });
+});
+const setTurnOrder = (gameId, orderedUserIds, userId) => configure(gameId, userId, game => {
+  if (game.status !== 'TURN_ORDER_SETUP') throw fail('Set turn order before starting the game');
+  const participants = game.participants.map(p => p.userId.toString());
+  if (new Set(orderedUserIds).size !== orderedUserIds.length || orderedUserIds.length !== participants.length || orderedUserIds.some(id => !participants.includes(id))) throw fail('Turn order must contain each accepted participant exactly once');
   game.turnOrder = orderedUserIds;
-  await game.save();
-  
-  _emitUpdate(gameId);
-  
-  return game;
-};
-
-const startGame = async (gameId, userId) => {
-  const game = await Game.findById(gameId);
-  if (!game) throw new Error('Game not found');
-  
-  if (game.createdBy.toString() !== userId.toString()) {
-    throw new Error('Only the creator can start the game');
-  }
-
-  if (game.status !== 'TURN_ORDER_SETUP') {
-    throw new Error('Game is not ready to be started (must be in TURN_ORDER_SETUP)');
-  }
-
-  if (game.turnOrder.length !== game.participants.length) {
-    throw new Error('Turn order is not properly set');
-  }
-
+});
+const startGame = (gameId, userId) => configure(gameId, userId, game => {
+  if (game.status !== 'TURN_ORDER_SETUP') throw fail('Finalize players and set the turn order first');
+  const order = game.turnOrder.map(String), participants = game.participants.map(p => String(p.userId));
+  if (order.length < 2 || order.length > 6 || new Set(order).size !== order.length || order.length !== participants.length || order.some(id => !participants.includes(id))) throw fail('Turn order is not properly set');
   game.status = 'ACTIVE';
   game.startedAt = new Date();
-  await game.save();
-  
-  _emitUpdate(gameId);
-  
-  return game;
-};
+});
 
 const endGame = async (gameId, userId) => {
-  const game = await Game.findById(gameId);
-  if (!game) throw new Error('Game not found');
-
-  if (game.createdBy.toString() !== userId.toString()) {
-    throw new Error('Only the creator can end the game');
-  }
-
-  // Can only end if active
-  if (game.status !== 'ACTIVE') {
-    throw new Error('Game is not active');
-  }
-
-  // Verify there's no round in progress (optional depending on exact rules, but good practice)
-  const Round = require('../rounds/round.model');
-  const activeRound = await Round.findOne({ gameId, status: { $nin: ['COMPLETED'] } });
-  if (activeRound) {
-    throw new Error('Cannot end game while a round is in progress');
-  }
-
   const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
-    game.status = 'ENDED';
-    game.endedAt = new Date();
-    await game.save({ session });
-
-    // Update global balances
-    const User = require('../users/user.model');
-    for (const p of game.participants) {
-      if (p.balance !== 0) {
-        await User.findByIdAndUpdate(
-          p.userId,
-          { $inc: { globalBalance: p.balance } },
-          { session }
-        );
+    await session.withTransaction(async () => {
+      const game = await Game.findById(gameId).session(session);
+      if (!game) throw fail('Game not found', 404);
+      if (game.createdBy.toString() !== userId.toString()) throw fail('Only the host can end the game', 403);
+      if (game.status !== 'ACTIVE') throw fail('Game is not active');
+      const Round = require('../rounds/round.model');
+      if (await Round.exists({ gameId, status: { $ne: 'COMPLETED' } }).session(session)) throw fail('Finish the current round before ending the game');
+      game.status = 'ENDED';
+      game.endedAt = new Date();
+      await game.save({ session });
+      const User = require('../users/user.model');
+      for (const player of game.participants) {
+        await User.updateOne({ _id: player.userId }, { $inc: { globalBalance: player.balance, __v: 1 } }, { session });
       }
-    }
-
-    await session.commitTransaction();
-  } catch (err) {
-    await session.abortTransaction();
-    throw err;
-  } finally {
-    session.endSession();
-  }
-
+    });
+  } finally { await session.endSession(); }
   _emitUpdate(gameId);
-
-  return game;
+  return getGameById(gameId, userId);
 };
 
 module.exports = {

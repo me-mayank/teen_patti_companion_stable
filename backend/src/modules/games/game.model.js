@@ -24,6 +24,7 @@ const gameSchema = new mongoose.Schema(
       ],
       default: 'CREATED',
     },
+    mode: { type: String, enum: ['CLASSIC', 'JOKER'], default: 'CLASSIC' },
     bootAmount: {
       type: Number,
       required: true,

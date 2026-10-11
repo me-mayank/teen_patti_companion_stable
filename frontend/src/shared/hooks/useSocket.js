@@ -5,7 +5,7 @@ export const useSocket = () => {
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    const socketInstance = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000');
+    const socketInstance = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', { auth: { token: localStorage.getItem('token') } });
     
     setSocket(socketInstance);
 

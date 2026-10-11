@@ -20,6 +20,7 @@ const TurnOrderSetup = () => {
     const fetchGame = async () => {
       try {
         const gameData = await gamesApi.getGameById(gameId);
+        if (gameData.status === 'ACTIVE') { navigate(`/games/${gameId}/board`, { replace: true }); return; }
         setGame(gameData);
         // Map participants to just the user objects
         setParticipants(gameData.participants.map(p => p.userId));
@@ -31,11 +32,13 @@ const TurnOrderSetup = () => {
       }
     };
     fetchGame();
-  }, [gameId]);
+  }, [gameId, navigate]);
 
   useEffect(() => {
     if (socket) {
-      socket.emit('joinGame', gameId);
+      const join = () => socket.emit('joinGame', gameId);
+      socket.on('connect', join);
+      if (socket.connected) join();
       
       socket.on('game:update', async () => {
         try {
@@ -50,6 +53,8 @@ const TurnOrderSetup = () => {
 
       return () => {
         socket.off('game:update');
+        socket.off('connect', join);
+        socket.emit('leaveGame', gameId);
       };
     }
   }, [socket, gameId, navigate]);
@@ -91,6 +96,8 @@ const TurnOrderSetup = () => {
     );
   }
 
+  if (!game) return <div className="min-h-screen bg-slate-950 text-white p-8" role="alert">{error || 'Table unavailable'}</div>;
+
   const isCreator = game.createdBy?._id === user?._id || game.createdBy === user?._id;
 
   return (
@@ -114,7 +121,7 @@ const TurnOrderSetup = () => {
         <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800">
           <div className="space-y-3">
             {participants.map((p, index) => {
-              const isCreator = game.createdBy?._id === p._id;
+              const isHostSeat = game.createdBy?._id === p._id;
               
               return (
                 <div 
@@ -128,13 +135,14 @@ const TurnOrderSetup = () => {
                   <div className="flex-1 flex justify-between items-center">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-slate-200">{p.name}</span>
-                      {game.createdBy?._id === p._id && <Shield className="w-4 h-4 text-emerald-500" />}
+                      {isHostSeat && <Shield className="w-4 h-4 text-emerald-500" />}
                     </div>
                   </div>
 
                   {isCreator && (
                     <div className="flex flex-col gap-1">
                       <button 
+                        aria-label={`Move ${p.name} earlier`}
                         onClick={() => moveUp(index)}
                         disabled={index === 0}
                         className="p-1 text-slate-400 hover:text-white hover:bg-slate-700 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
@@ -142,6 +150,7 @@ const TurnOrderSetup = () => {
                         <ChevronUp className="w-5 h-5" />
                       </button>
                       <button 
+                        aria-label={`Move ${p.name} later`}
                         onClick={() => moveDown(index)}
                         disabled={index === participants.length - 1}
                         className="p-1 text-slate-400 hover:text-white hover:bg-slate-700 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent"

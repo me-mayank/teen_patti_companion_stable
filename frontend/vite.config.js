@@ -13,7 +13,7 @@ export default defineConfig({
       manifest: {
         name: 'Teen Patti Companion',
         short_name: 'Teen Patti Companion',
-        description: 'Premium digital ledger and game manager for Teen Patti',
+        description: 'Private multiplayer Teen Patti with Classic and Joker cards',
         theme_color: '#070606',
         background_color: '#070606',
         display: 'standalone',

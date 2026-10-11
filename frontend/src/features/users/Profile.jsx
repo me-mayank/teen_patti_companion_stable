@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { ArrowLeft, User, Mail, Wallet, AtSign, Edit2, Loader2, X, LogOut } from 'lucide-react';
+import { ArrowLeft, Mail, Wallet, AtSign, Edit2, Loader2, X, LogOut } from 'lucide-react';
 import axiosClient from '../../shared/api/axiosClient';
 import * as usersApi from './users.api';
 
 const Profile = () => {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const navigate = useNavigate();
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);

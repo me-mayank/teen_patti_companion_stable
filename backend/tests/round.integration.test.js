@@ -1,0 +1,289 @@
+const mongoose = require('mongoose');
+const { MongoMemoryReplSet } = require('mongodb-memory-server');
+const request = require('supertest');
+const jwt = require('jsonwebtoken');
+const app = require('../app');
+const { init } = require('../src/shared/sockets');
+const Game = require('../src/modules/games/game.model');
+const Round = require('../src/modules/rounds/round.model');
+const User = require('../src/modules/users/user.model');
+const Transaction = require('../src/modules/ledger/transaction.model');
+const Invitation = require('../src/modules/invitations/invitation.model');
+
+jest.setTimeout(120000);
+let database, players, tokens, game;
+const emit = jest.fn();
+const fakeIO = { use: jest.fn(), on: jest.fn(), to: jest.fn(() => ({ emit })) };
+const post = (path, player = 0, body = {}) => request(app).post(`/api${path}`).set('Authorization', `Bearer ${tokens[player]}`).send(body);
+const get = (path, player = 0) => request(app).get(`/api${path}`).set('Authorization', `Bearer ${tokens[player]}`);
+const patch = (path, player = 0, body = {}) => request(app).patch(`/api${path}`).set('Authorization', `Bearer ${tokens[player]}`).send(body);
+const cards = (...codes) => codes.map(code => ({ rank: Number(code.slice(0,-1)), suit: code.slice(-1) }));
+async function deal() {
+  const response = await post(`/games/${game._id}/rounds`);
+  expect(response.status).toBe(201);
+  return response.body;
+}
+async function stored(round) { return Round.findById(round._id).select('+players.cards').lean(); }
+async function forceHands(round, hands) {
+  const updates = {};
+  hands.forEach((hand,index) => { updates[`players.${index}.cards`] = hand; });
+  await Round.updateOne({ _id:round._id }, { $set:updates });
+}
+async function expectBalanced(roundId) {
+  const tx = await Transaction.find({ roundId });
+  const sum = tx.reduce((total, transaction) => total + transaction.amount, 0);
+  expect(sum).toBe(0);
+  const currentGame = await Game.findById(game._id);
+  expect(currentGame.participants.reduce((sum,p) => sum+p.balance,0)).toBe(0);
+}
+
+beforeAll(async () => {
+  database = await MongoMemoryReplSet.create({ replSet: { count:1 }, binary: { downloadDir: '/tmp/teen-patti-mongodb' } });
+  await mongoose.connect(database.getUri());
+  init(fakeIO);
+  await Promise.all([Round.init(), Game.init(), User.init(), Invitation.init()]);
+});
+afterAll(async () => { await mongoose.disconnect(); if (database) await database.stop(); });
+beforeEach(async () => {
+  await Promise.all([Game.deleteMany({}),Round.deleteMany({}),User.deleteMany({}),Transaction.deleteMany({}),Invitation.deleteMany({})]);
+  players = await User.create(Array.from({length:4}, (_,i) => ({ name:`Player ${i+1}`,email:`player${i}@example.test`,username:`player${i}`,passwordHash:'test-only-hash',globalBalance:1000 })));
+  tokens = players.map(user => jwt.sign({id:String(user._id)},process.env.JWT_SECRET || 'secret'));
+  game = await Game.create({ name:'Integration table',createdBy:players[0]._id,mode:'CLASSIC',bootAmount:10,maxBetMultiplier:5,status:'ACTIVE',participants:players.slice(0,3).map(user=>({userId:user._id})),turnOrder:players.slice(0,3).map(user=>user._id) });
+  emit.mockClear();
+});
+
+test('deal stores unique cards, takes boot exactly once, keeps blind hands off HTTP and sockets', async () => {
+  const round = await deal();
+  expect(round.potAmount).toBe(30);
+  expect(round.players.every(p=>!p.cards && !p.handRank && !p.seenCards)).toBe(true);
+  const raw = await stored(round);
+  expect(new Set(raw.players.flatMap(p=>p.cards).map(c=>`${c.rank}${c.suit}`)).size).toBe(9);
+  expect(await Transaction.countDocuments({type:'BOOT'})).toBe(3);
+  expect(emit.mock.calls.every(([,payload]) => !payload.round && !payload.players)).toBe(true);
+  expect((await post(`/games/${game._id}/rounds`)).status).toBe(400);
+});
+test('only host may deal, and outsiders cannot read rounds or game history', async () => {
+  expect((await post(`/games/${game._id}/rounds`,1)).status).toBe(403);
+  const round = await deal();
+  for (const path of [`/rounds/${round._id}`,`/games/${game._id}/rounds/current`,`/games/${game._id}`,`/games/${game._id}/transactions`,`/games/${game._id}/summary`]) expect((await get(path,3)).status).toBe(403);
+});
+test('seeing cards works off-turn, reveals only own cards and charges seen stake', async () => {
+  const round = await deal();
+  const seen = await post(`/rounds/${round._id}/see-cards`,1);
+  expect(seen.status).toBe(200);
+  expect(seen.body.currentTurnIndex).toBe(0);
+  expect(seen.body.players[1].cards).toHaveLength(3);
+  expect(seen.body.players[0].cards).toBeUndefined();
+  expect((await get(`/rounds/${round._id}`,0)).body.players[1].cards).toBeUndefined();
+  await post(`/rounds/${round._id}/bet`,0);
+  const bet = await post(`/rounds/${round._id}/bet`,1);
+  expect(bet.status).toBe(200);
+  expect(bet.body.potAmount).toBe(60);
+  expect(bet.body.players[1].totalContribution).toBe(30);
+  expect(bet.body.availableBalance).toBe(970);
+});
+test('turn enforcement and raise cap do not alter the ledger on rejection', async () => {
+  const round = await deal();
+  expect((await post(`/rounds/${round._id}/bet`,1)).status).toBe(403);
+  expect((await post(`/rounds/${round._id}/bet-twice`,0)).body.currentBet).toBe(20);
+  expect((await post(`/rounds/${round._id}/bet-twice`,1)).body.currentBet).toBe(40);
+  expect((await post(`/rounds/${round._id}/bet-twice`,2)).status).toBe(400);
+  expect((await stored(round)).potAmount).toBe(90);
+});
+test('packing awards the pot once, conserves balances and rotates the next dealer', async () => {
+  const round = await deal();
+  await post(`/rounds/${round._id}/pack`,0);
+  const result = await post(`/rounds/${round._id}/pack`,1);
+  expect(result.body.status).toBe('COMPLETED');
+  expect(String(result.body.winnerId._id)).toBe(String(players[2]._id));
+  expect(result.body.players.every(p=>!p.cards)).toBe(true);
+  expect((await post(`/rounds/${round._id}/pack`,1)).status).toBe(400);
+  expect(await Transaction.countDocuments({roundId:round._id,type:'ROUND_WIN'})).toBe(1);
+  await expectBalanced(round._id);
+  expect((await deal()).currentTurnIndex).toBe(1);
+});
+test('show compares actual hands, reveals contenders only and rejects client-selected results', async () => {
+  const round = await deal();
+  await forceHands(round,[cards('2S','5H','8D'),cards('14S','14H','14D'),cards('13S','13H','13D')]);
+  await post(`/rounds/${round._id}/pack`,0);
+  const result = await post(`/rounds/${round._id}/show/request`,1);
+  expect(result.status).toBe(200);
+  expect(result.body.winnerId._id).toBe(String(players[1]._id));
+  expect(result.body.potAmount).toBe(40);
+  expect(result.body.players[0].cards).toBeUndefined();
+  expect(result.body.players[1].handRank).toBe('Trail');
+  expect(result.body.players[2].cards).toHaveLength(3);
+  expect((await post(`/rounds/${round._id}/show/result`,2,{winnerUserId:String(players[2]._id)})).status).toBe(403);
+  await expectBalanced(round._id);
+});
+test('equal hands award a show to the non-requester; a seen player cannot show a blind player', async () => {
+  const round = await deal();
+  await forceHands(round,[cards('2S','5H','8D'),cards('14S','12H','9D'),cards('14C','12D','9S')]);
+  await post(`/rounds/${round._id}/pack`,0);
+  await post(`/rounds/${round._id}/see-cards`,1);
+  expect((await post(`/rounds/${round._id}/show/request`,1)).status).toBe(400);
+  await post(`/rounds/${round._id}/see-cards`,2);
+  const show = await post(`/rounds/${round._id}/show/request`,1);
+  expect(show.body.winnerId._id).toBe(String(players[2]._id));
+  expect(show.body.potAmount).toBe(50);
+});
+test('accepted side show compares hands privately, charges once and packs the requester on ties', async () => {
+  const round = await deal();
+  await forceHands(round,[cards('14S','12H','9D'),cards('13S','10H','8D'),cards('14C','12D','9S')]);
+  expect((await post(`/rounds/${round._id}/side-show/request`,0)).status).toBe(400);
+  await post(`/rounds/${round._id}/see-cards`,0);
+  await post(`/rounds/${round._id}/see-cards`,2);
+  const asked = await post(`/rounds/${round._id}/side-show/request`,0);
+  expect(asked.body.potAmount).toBe(50);
+  expect(asked.body.players[0].totalContribution).toBe(30);
+  expect((await post(`/rounds/${round._id}/bet`,0)).status).toBe(400);
+  expect((await post(`/rounds/${round._id}/side-show/respond`,1,{accept:true})).status).toBe(403);
+  const accepted = await post(`/rounds/${round._id}/side-show/respond`,2,{accept:true});
+  expect(accepted.body.players[0].status).toBe('PACKED');
+  expect(accepted.body.players[0].cards).toBeUndefined();
+  expect(accepted.body.currentTurnIndex).toBe(1);
+  expect(accepted.body.status).toBe('ACTIVE');
+  expect((await post(`/rounds/${round._id}/side-show/respond`,2,{accept:true})).status).toBe(400);
+});
+test('declined side show keeps the fee in the pot and advances play', async () => {
+  const round = await deal();
+  await post(`/rounds/${round._id}/see-cards`,0);await post(`/rounds/${round._id}/see-cards`,2);
+  await post(`/rounds/${round._id}/side-show/request`,0);
+  const result = await post(`/rounds/${round._id}/side-show/respond`,2,{accept:false});
+  expect(result.body.currentTurnIndex).toBe(1);
+  expect(result.body.potAmount).toBe(50);
+  expect(result.body.players.every(p=>p.status==='ACTIVE')).toBe(true);
+});
+test('joker indicator is public, excluded from hands, and wild rank changes the winner', async () => {
+  await Game.updateOne({_id:game._id},{$set:{mode:'JOKER'}});
+  const round = await deal();
+  expect(round.mode).toBe('JOKER');expect(round.jokerCard.rank).toBeGreaterThanOrEqual(2);
+  const raw = await stored(round);
+  expect(raw.players.flatMap(p=>p.cards).some(c=>c.rank===round.jokerCard.rank && c.suit===round.jokerCard.suit)).toBe(false);
+  await Round.updateOne({_id:round._id},{$set:{jokerCard:{rank:9,suit:'C'}}});
+  await forceHands(round,[cards('2S','5H','8D'),cards('9S','14H','14D'),cards('13S','13H','13D')]);
+  await post(`/rounds/${round._id}/pack`,0);
+  const result = await post(`/rounds/${round._id}/show/request`,1);
+  expect(result.body.winnerId._id).toBe(String(players[1]._id));
+});
+test('insufficient funds roll back the whole deal and a rejected bet', async () => {
+  await User.updateOne({_id:players[2]._id},{$set:{globalBalance:9}});
+  expect((await post(`/games/${game._id}/rounds`)).status).toBe(400);
+  expect(await Round.countDocuments({})).toBe(0);expect(await Transaction.countDocuments({})).toBe(0);
+  expect((await Game.findById(game._id)).currentRoundNumber).toBe(0);
+  await User.updateOne({_id:players[2]._id},{$set:{globalBalance:1000}});
+  const round = await deal();
+  await User.updateOne({_id:players[0]._id},{$set:{globalBalance:10}});
+  expect((await post(`/rounds/${round._id}/bet`,0)).status).toBe(400);
+  expect((await stored(round)).potAmount).toBe(30);
+});
+test('simultaneous deals and duplicate bets charge only once', async () => {
+  const deals = await Promise.all([post(`/games/${game._id}/rounds`),post(`/games/${game._id}/rounds`)]);
+  expect(deals.map(r=>r.status).sort()).toEqual([201,400]);
+  const round = deals.find(r=>r.status===201).body;
+  const bets = await Promise.all([post(`/rounds/${round._id}/bet`),post(`/rounds/${round._id}/bet`)]);
+  expect(bets.map(r=>r.status).sort()).toEqual([200,403]);
+  expect((await stored(round)).potAmount).toBe(40);
+});
+test('wallet availability includes losses at other tables', async () => {
+  await Game.create({name:'Other active table',createdBy:players[0]._id,bootAmount:10,status:'ACTIVE',participants:[{userId:players[0]._id,balance:-995},{userId:players[3]._id,balance:995}]});
+  expect((await post(`/games/${game._id}/rounds`)).status).toBe(400);
+  expect(await Transaction.countDocuments({})).toBe(0);
+});
+test('ending requires completed rounds, settles once and rejects duplicate turn orders', async () => {
+  const round = await deal();
+  expect((await patch(`/games/${game._id}/end`)).status).toBe(400);
+  await post(`/rounds/${round._id}/pack`,0);await post(`/rounds/${round._id}/pack`,1);
+  const before = await Game.findById(game._id);
+  expect((await patch(`/games/${game._id}/end`)).status).toBe(200);
+  for (let i=0;i<3;i++) expect((await User.findById(players[i]._id)).globalBalance).toBe(1000+before.participants[i].balance);
+  expect((await patch(`/games/${game._id}/end`)).status).toBe(400);
+  await Game.updateOne({_id:game._id},{$set:{status:'TURN_ORDER_SETUP'}});
+  expect((await patch(`/games/${game._id}/turn-order`,0,{orderedUserIds:[String(players[0]._id),String(players[0]._id),String(players[2]._id)]})).status).toBe(400);
+});
+test('invalid settings receive useful validation errors and joker selection persists', async () => {
+  const bad = await post('/games',0,{name:'Invalid',bootAmount:-1,mode:'UNKNOWN'});
+  expect(bad.status).toBe(400);expect(bad.body.message).toMatch(/Boot amount|Invalid option/);
+  const result = await post('/games',0,{name:'Joker table',bootAmount:10,mode:'JOKER'});
+  expect(result.status).toBe(201);expect(result.body.mode).toBe('JOKER');expect(result.body.maxBetMultiplier).toBe(5);
+});
+
+test('create, invite, accept, finalize, order and start reaches a playable digital table', async () => {
+  const created = await post('/games',0,{name:'Friends table',bootAmount:10,mode:'JOKER'});
+  const gameId = created.body._id;
+  const invitations = await post(`/games/${gameId}/invitations`,0,{userIds:[String(players[1]._id),String(players[2]._id)]});
+  expect(invitations.status).toBe(201);
+  for (let i=0;i<2;i++) expect((await post(`/invitations/${invitations.body[i]._id}/respond`,i+1,{status:'ACCEPTED'})).status).toBe(200);
+  const pending = await Invitation.create({gameId,invitedUserId:players[3]._id,invitedBy:players[0]._id});
+  expect((await patch(`/games/${gameId}/finalize-players`)).status).toBe(200);
+  expect((await Invitation.findById(pending._id)).status).toBe('DECLINED');
+  expect((await patch(`/games/${gameId}/turn-order`,0,{orderedUserIds:players.slice(0,3).map(p=>String(p._id))})).status).toBe(200);
+  expect((await patch(`/games/${gameId}/start`)).status).toBe(200);
+  const round = await post(`/games/${gameId}/rounds`);
+  expect(round.status).toBe(201);expect(round.body.mode).toBe('JOKER');expect(round.body.players).toHaveLength(3);
+});
+test('failed invitation acceptance remains pending and cannot join a finalized table', async () => {
+  const waiting = await Game.create({name:'Waiting',createdBy:players[0]._id,bootAmount:10,status:'WAITING_FOR_PLAYERS',participants:[{userId:players[0]._id}]});
+  const invite = await Invitation.create({gameId:waiting._id,invitedUserId:players[1]._id,invitedBy:players[0]._id});
+  await User.updateOne({_id:players[1]._id},{$set:{globalBalance:9}});
+  expect((await post(`/invitations/${invite._id}/respond`,1,{status:'ACCEPTED'})).status).toBe(400);
+  expect((await Invitation.findById(invite._id)).status).toBe('PENDING');
+  await User.updateOne({_id:players[1]._id},{$set:{globalBalance:1000}});
+  await Game.updateOne({_id:waiting._id},{$set:{status:'TURN_ORDER_SETUP'}});
+  expect((await post(`/invitations/${invite._id}/respond`,1,{status:'ACCEPTED'})).status).toBe(400);
+});
+test('six-player capacity and malformed IDs are rejected', async () => {
+  const extra = await User.create(Array.from({length:3},(_,i)=>({name:`Extra ${i}`,email:`extra${i}@example.test`,username:`extra${i}`,passwordHash:'test-only',globalBalance:1000})));
+  await Game.updateOne({_id:game._id},{$set:{status:'WAITING_FOR_PLAYERS',participants:[...players.slice(0,3),...extra].map(p=>({userId:p._id}))}});
+  const invite = await Invitation.create({gameId:game._id,invitedUserId:players[3]._id,invitedBy:players[0]._id});
+  expect((await post(`/invitations/${invite._id}/respond`,3,{status:'ACCEPTED'})).status).toBe(400);
+  expect((await get('/rounds/not-an-id')).status).toBe(404);
+});
+test('legacy physical-card show stays usable, but only the host can select its winner', async () => {
+  await Game.updateOne({_id:game._id},{$set:{currentRoundNumber:1}});
+  const legacy = await Round.create({gameId:game._id,roundNumber:1,status:'SHOW_PENDING',potAmount:30,currentBet:10,players:players.slice(0,3).map((p,i)=>({userId:p._id,status:i===0?'PACKED':'ACTIVE'}))});
+  expect((await post(`/rounds/${legacy._id}/show/result`,1,{winnerUserId:String(players[1]._id)})).status).toBe(403);
+  expect((await post(`/rounds/${legacy._id}/show/result`,0,{winnerUserId:String(players[1]._id)})).body.status).toBe('COMPLETED');
+});
+test('socket connections authenticate players, reject unauthorized rooms and send no hands', async () => {
+  const { Server } = require('socket.io');
+  const { io: client } = require('socket.io-client');
+  const server = require('node:http').createServer(app);
+  const io = new Server(server);
+  init(io);
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const sockets = [];
+  const connect = token => new Promise((resolve,reject)=>{
+    const socket = client(url,{auth:{token},transports:['websocket'],reconnection:false,timeout:3000});sockets.push(socket);
+    socket.once('connect',()=>resolve(socket));socket.once('connect_error',reject);
+  });
+  try {
+    await expect(connect('invalid')).rejects.toThrow('Sign in');
+    const member = await connect(tokens[0]);
+    const stranger = await connect(tokens[3]);
+    const join = socket => new Promise(resolve=>socket.emit('joinGame',String(game._id),resolve));
+    expect(await join(member)).toEqual({ok:true});
+    expect((await join(stranger)).ok).toBe(false);
+    const update = new Promise(resolve=>member.once('round:update',resolve));
+    await deal();
+    const payload = await update;
+    expect(Object.keys(payload)).toEqual(['gameId']);
+    expect(payload.gameId).toBe(String(game._id));
+  } finally {
+    sockets.forEach(socket=>socket.disconnect());
+    await new Promise(resolve=>io.close(resolve));
+    init(fakeIO);
+  }
+});
+test('profile username fee uses global balance, rejects overspending and search exposes only public player data', async () => {
+  const result = await request(app).put('/api/users/username').set('Authorization',`Bearer ${tokens[0]}`).send({username:'newplayer'});
+  expect(result.status).toBe(200);expect(result.body.globalBalance).toBe(0);
+  expect((await Transaction.findOne({type:'FEE'})).amount).toBe(-1000);
+  const second = await request(app).put('/api/users/username').set('Authorization',`Bearer ${tokens[0]}`).send({username:'anothername'});
+  expect(second.status).toBe(400);
+  const users = await get('/users');
+  expect(users.status).toBe(200);expect(users.body).toHaveLength(3);
+  expect(users.body.every(user=>!user.email && user.globalBalance===undefined && !user.passwordHash)).toBe(true);
+  expect((await get('/users?search=%5B')).status).toBe(200);
+});

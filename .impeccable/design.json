@@ -1,0 +1,508 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-11T19:35:20.009874+00:00",
+  "title": "Design System: Teen Patti Companion",
+  "extensions": {
+    "colorMeta": {
+      "slate-950": {
+        "role": "neutral",
+        "displayName": "Slate 950",
+        "tonalRamp": [
+          "oklch(15.00% 0.0023 17.47)",
+          "oklch(26.43% 0.0023 17.47)",
+          "oklch(37.86% 0.0023 17.47)",
+          "oklch(49.29% 0.0023 17.47)",
+          "oklch(60.71% 0.0023 17.47)",
+          "oklch(72.14% 0.0023 17.47)",
+          "oklch(83.57% 0.0023 17.47)",
+          "oklch(95.00% 0.0023 17.47)"
+        ]
+      },
+      "slate-900": {
+        "role": "neutral",
+        "displayName": "Slate 900",
+        "tonalRamp": [
+          "oklch(15.00% 0.0039 48.49)",
+          "oklch(26.43% 0.0039 48.49)",
+          "oklch(37.86% 0.0039 48.49)",
+          "oklch(49.29% 0.0039 48.49)",
+          "oklch(60.71% 0.0039 48.49)",
+          "oklch(72.14% 0.0039 48.49)",
+          "oklch(83.57% 0.0039 48.49)",
+          "oklch(95.00% 0.0039 48.49)"
+        ]
+      },
+      "slate-800": {
+        "role": "neutral",
+        "displayName": "Slate 800",
+        "tonalRamp": [
+          "oklch(15.00% 0.0075 67.39)",
+          "oklch(26.43% 0.0075 67.39)",
+          "oklch(37.86% 0.0075 67.39)",
+          "oklch(49.29% 0.0075 67.39)",
+          "oklch(60.71% 0.0075 67.39)",
+          "oklch(72.14% 0.0075 67.39)",
+          "oklch(83.57% 0.0075 67.39)",
+          "oklch(95.00% 0.0075 67.39)"
+        ]
+      },
+      "slate-700": {
+        "role": "neutral",
+        "displayName": "Slate 700",
+        "tonalRamp": [
+          "oklch(15.00% 0.0407 66.80)",
+          "oklch(26.43% 0.0407 66.80)",
+          "oklch(37.86% 0.0407 66.80)",
+          "oklch(49.29% 0.0407 66.80)",
+          "oklch(60.71% 0.0407 66.80)",
+          "oklch(72.14% 0.0407 66.80)",
+          "oklch(83.57% 0.0407 66.80)",
+          "oklch(95.00% 0.0407 66.80)"
+        ]
+      },
+      "slate-400": {
+        "role": "neutral",
+        "displayName": "Slate 400",
+        "tonalRamp": [
+          "oklch(15.00% 0.0152 74.38)",
+          "oklch(26.43% 0.0152 74.38)",
+          "oklch(37.86% 0.0152 74.38)",
+          "oklch(49.29% 0.0152 74.38)",
+          "oklch(60.71% 0.0152 74.38)",
+          "oklch(72.14% 0.0152 74.38)",
+          "oklch(83.57% 0.0152 74.38)",
+          "oklch(95.00% 0.0152 74.38)"
+        ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "tonalRamp": [
+          "oklch(15.00% 0.0127 86.83)",
+          "oklch(26.43% 0.0127 86.83)",
+          "oklch(37.86% 0.0127 86.83)",
+          "oklch(49.29% 0.0127 86.83)",
+          "oklch(60.71% 0.0127 86.83)",
+          "oklch(72.14% 0.0127 86.83)",
+          "oklch(83.57% 0.0127 86.83)",
+          "oklch(95.00% 0.0127 86.83)"
+        ]
+      },
+      "emerald-500": {
+        "role": "primary",
+        "displayName": "Emerald 500",
+        "tonalRamp": [
+          "oklch(15.00% 0.1135 77.86)",
+          "oklch(26.43% 0.1135 77.86)",
+          "oklch(37.86% 0.1135 77.86)",
+          "oklch(49.29% 0.1135 77.86)",
+          "oklch(60.71% 0.1135 77.86)",
+          "oklch(72.14% 0.1135 77.86)",
+          "oklch(83.57% 0.1135 77.86)",
+          "oklch(95.00% 0.1135 77.86)"
+        ]
+      },
+      "emerald-400": {
+        "role": "primary",
+        "displayName": "Emerald 400",
+        "tonalRamp": [
+          "oklch(15.00% 0.0949 96.79)",
+          "oklch(26.43% 0.0949 96.79)",
+          "oklch(37.86% 0.0949 96.79)",
+          "oklch(49.29% 0.0949 96.79)",
+          "oklch(60.71% 0.0949 96.79)",
+          "oklch(72.14% 0.0949 96.79)",
+          "oklch(83.57% 0.0949 96.79)",
+          "oklch(95.00% 0.0949 96.79)"
+        ]
+      },
+      "red-500": {
+        "role": "secondary",
+        "displayName": "Red 500",
+        "tonalRamp": [
+          "oklch(15.00% 0.1937 26.72)",
+          "oklch(26.43% 0.1937 26.72)",
+          "oklch(37.86% 0.1937 26.72)",
+          "oklch(49.29% 0.1937 26.72)",
+          "oklch(60.71% 0.1937 26.72)",
+          "oklch(72.14% 0.1937 26.72)",
+          "oklch(83.57% 0.1937 26.72)",
+          "oklch(95.00% 0.1937 26.72)"
+        ]
+      },
+      "table-bg": {
+        "role": "neutral",
+        "displayName": "Table Bg",
+        "tonalRamp": [
+          "oklch(15.00% 0.0066 55.87)",
+          "oklch(26.43% 0.0066 55.87)",
+          "oklch(37.86% 0.0066 55.87)",
+          "oklch(49.29% 0.0066 55.87)",
+          "oklch(60.71% 0.0066 55.87)",
+          "oklch(72.14% 0.0066 55.87)",
+          "oklch(83.57% 0.0066 55.87)",
+          "oklch(95.00% 0.0066 55.87)"
+        ]
+      },
+      "table-header": {
+        "role": "neutral",
+        "displayName": "Table Header",
+        "tonalRamp": [
+          "oklch(15.00% 0.0135 61.81)",
+          "oklch(26.43% 0.0135 61.81)",
+          "oklch(37.86% 0.0135 61.81)",
+          "oklch(49.29% 0.0135 61.81)",
+          "oklch(60.71% 0.0135 61.81)",
+          "oklch(72.14% 0.0135 61.81)",
+          "oklch(83.57% 0.0135 61.81)",
+          "oklch(95.00% 0.0135 61.81)"
+        ]
+      },
+      "table-control": {
+        "role": "neutral",
+        "displayName": "Table Control",
+        "tonalRamp": [
+          "oklch(15.00% 0.0273 66.38)",
+          "oklch(26.43% 0.0273 66.38)",
+          "oklch(37.86% 0.0273 66.38)",
+          "oklch(49.29% 0.0273 66.38)",
+          "oklch(60.71% 0.0273 66.38)",
+          "oklch(72.14% 0.0273 66.38)",
+          "oklch(83.57% 0.0273 66.38)",
+          "oklch(95.00% 0.0273 66.38)"
+        ]
+      },
+      "table-gold": {
+        "role": "primary",
+        "displayName": "Table Gold",
+        "tonalRamp": [
+          "oklch(15.00% 0.1086 81.11)",
+          "oklch(26.43% 0.1086 81.11)",
+          "oklch(37.86% 0.1086 81.11)",
+          "oklch(49.29% 0.1086 81.11)",
+          "oklch(60.71% 0.1086 81.11)",
+          "oklch(72.14% 0.1086 81.11)",
+          "oklch(83.57% 0.1086 81.11)",
+          "oklch(95.00% 0.1086 81.11)"
+        ]
+      },
+      "table-text": {
+        "role": "neutral",
+        "displayName": "Table Text",
+        "tonalRamp": [
+          "oklch(15.00% 0.0204 81.78)",
+          "oklch(26.43% 0.0204 81.78)",
+          "oklch(37.86% 0.0204 81.78)",
+          "oklch(49.29% 0.0204 81.78)",
+          "oklch(60.71% 0.0204 81.78)",
+          "oklch(72.14% 0.0204 81.78)",
+          "oklch(83.57% 0.0204 81.78)",
+          "oklch(95.00% 0.0204 81.78)"
+        ]
+      },
+      "table-muted": {
+        "role": "neutral",
+        "displayName": "Table Muted",
+        "tonalRamp": [
+          "oklch(15.00% 0.0349 81.95)",
+          "oklch(26.43% 0.0349 81.95)",
+          "oklch(37.86% 0.0349 81.95)",
+          "oklch(49.29% 0.0349 81.95)",
+          "oklch(60.71% 0.0349 81.95)",
+          "oklch(72.14% 0.0349 81.95)",
+          "oklch(83.57% 0.0349 81.95)",
+          "oklch(95.00% 0.0349 81.95)"
+        ]
+      },
+      "felt-deep": {
+        "role": "secondary",
+        "displayName": "Felt Deep",
+        "tonalRamp": [
+          "oklch(15.00% 0.0683 162.50)",
+          "oklch(26.43% 0.0683 162.50)",
+          "oklch(37.86% 0.0683 162.50)",
+          "oklch(49.29% 0.0683 162.50)",
+          "oklch(60.71% 0.0683 162.50)",
+          "oklch(72.14% 0.0683 162.50)",
+          "oklch(83.57% 0.0683 162.50)",
+          "oklch(95.00% 0.0683 162.50)"
+        ]
+      },
+      "felt-light": {
+        "role": "secondary",
+        "displayName": "Felt Light",
+        "tonalRamp": [
+          "oklch(15.00% 0.0846 162.43)",
+          "oklch(26.43% 0.0846 162.43)",
+          "oklch(37.86% 0.0846 162.43)",
+          "oklch(49.29% 0.0846 162.43)",
+          "oklch(60.71% 0.0846 162.43)",
+          "oklch(72.14% 0.0846 162.43)",
+          "oklch(83.57% 0.0846 162.43)",
+          "oklch(95.00% 0.0846 162.43)"
+        ]
+      },
+      "rail": {
+        "role": "neutral",
+        "displayName": "Rail",
+        "tonalRamp": [
+          "oklch(15.00% 0.0613 65.71)",
+          "oklch(26.43% 0.0613 65.71)",
+          "oklch(37.86% 0.0613 65.71)",
+          "oklch(49.29% 0.0613 65.71)",
+          "oklch(60.71% 0.0613 65.71)",
+          "oklch(72.14% 0.0613 65.71)",
+          "oklch(83.57% 0.0613 65.71)",
+          "oklch(95.00% 0.0613 65.71)"
+        ]
+      },
+      "card-face": {
+        "role": "neutral",
+        "displayName": "Card Face",
+        "tonalRamp": [
+          "oklch(15.00% 0.0098 87.47)",
+          "oklch(26.43% 0.0098 87.47)",
+          "oklch(37.86% 0.0098 87.47)",
+          "oklch(49.29% 0.0098 87.47)",
+          "oklch(60.71% 0.0098 87.47)",
+          "oklch(72.14% 0.0098 87.47)",
+          "oklch(83.57% 0.0098 87.47)",
+          "oklch(95.00% 0.0098 87.47)"
+        ]
+      },
+      "card-black": {
+        "role": "neutral",
+        "displayName": "Card Black",
+        "tonalRamp": [
+          "oklch(15.00% 0.0133 180.13)",
+          "oklch(26.43% 0.0133 180.13)",
+          "oklch(37.86% 0.0133 180.13)",
+          "oklch(49.29% 0.0133 180.13)",
+          "oklch(60.71% 0.0133 180.13)",
+          "oklch(72.14% 0.0133 180.13)",
+          "oklch(83.57% 0.0133 180.13)",
+          "oklch(95.00% 0.0133 180.13)"
+        ]
+      },
+      "card-red": {
+        "role": "secondary",
+        "displayName": "Card Red",
+        "tonalRamp": [
+          "oklch(15.00% 0.1791 21.54)",
+          "oklch(26.43% 0.1791 21.54)",
+          "oklch(37.86% 0.1791 21.54)",
+          "oklch(49.29% 0.1791 21.54)",
+          "oklch(60.71% 0.1791 21.54)",
+          "oklch(72.14% 0.1791 21.54)",
+          "oklch(83.57% 0.1791 21.54)",
+          "oklch(95.00% 0.1791 21.54)"
+        ]
+      },
+      "card-back": {
+        "role": "secondary",
+        "displayName": "Card Back",
+        "tonalRamp": [
+          "oklch(15.00% 0.1354 19.00)",
+          "oklch(26.43% 0.1354 19.00)",
+          "oklch(37.86% 0.1354 19.00)",
+          "oklch(49.29% 0.1354 19.00)",
+          "oklch(60.71% 0.1354 19.00)",
+          "oklch(72.14% 0.1354 19.00)",
+          "oklch(83.57% 0.1354 19.00)",
+          "oklch(95.00% 0.1354 19.00)"
+        ]
+      },
+      "wild": {
+        "role": "primary",
+        "displayName": "Wild",
+        "tonalRamp": [
+          "oklch(15.00% 0.1377 83.07)",
+          "oklch(26.43% 0.1377 83.07)",
+          "oklch(37.86% 0.1377 83.07)",
+          "oklch(49.29% 0.1377 83.07)",
+          "oklch(60.71% 0.1377 83.07)",
+          "oklch(72.14% 0.1377 83.07)",
+          "oklch(83.57% 0.1377 83.07)",
+          "oklch(95.00% 0.1377 83.07)"
+        ]
+      },
+      "focus": {
+        "role": "neutral",
+        "displayName": "Focus",
+        "tonalRamp": [
+          "oklch(15.00% 0.0886 85.90)",
+          "oklch(26.43% 0.0886 85.90)",
+          "oklch(37.86% 0.0886 85.90)",
+          "oklch(49.29% 0.0886 85.90)",
+          "oklch(60.71% 0.0886 85.90)",
+          "oklch(72.14% 0.0886 85.90)",
+          "oklch(83.57% 0.0886 85.90)",
+          "oklch(95.00% 0.0886 85.90)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "body": {
+        "displayName": "System sans-serif",
+        "purpose": "Existing app content and table controls."
+      },
+      "table-title": {
+        "displayName": "Table title",
+        "purpose": "Game name in table navigation."
+      },
+      "table-label": {
+        "displayName": "Table label",
+        "purpose": "Supporting table header copy and seat names."
+      },
+      "pot": {
+        "displayName": "Pot amount",
+        "purpose": "Main table financial figure."
+      },
+      "table-wordmark": {
+        "displayName": "Felt wordmark",
+        "purpose": "Subdued table branding."
+      }
+    },
+    "shadows": [
+      {
+        "name": "felt",
+        "value": "inset 0 0 0 2px #e3b86a, inset 0 6px 28px #0b3526, 0 14px 30px #080705",
+        "purpose": "Recessed felt and raised oval rail."
+      },
+      {
+        "name": "playing-card",
+        "value": "0 3px 8px #0005",
+        "purpose": "Lift individual cards above the surface."
+      }
+    ],
+    "motion": [
+      {
+        "name": "action-background",
+        "value": "background .15s",
+        "purpose": "Table button hover transition; removed for reduced motion."
+      },
+      {
+        "name": "deal-in",
+        "value": "350ms cubic-bezier(.16,1,.3,1); 80ms stagger; translate from 0 -12px to 0 0",
+        "purpose": "Card entry; removed for reduced motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "narrow-table",
+        "value": "370px"
+      },
+      {
+        "name": "mobile-table",
+        "value": "600px"
+      },
+      {
+        "name": "wide-table",
+        "value": "1100px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Table primary action",
+      "kind": "button",
+      "refersTo": "table-primary",
+      "description": "Active-round action with stable position and explicit disabled state.",
+      "html": "<button class=\"ds-table-primary\">Chaal \u20b920</button>",
+      "css": ".ds-table-primary{display:inline-flex;align-items:center;justify-content:center;gap:3px;padding:12px 18px;min-height:46px;border:0;border-radius:10px;cursor:pointer;transition:background .15s;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;font-size:14px;font-weight:600;background:#e3b86a;color:#281b0c;}.ds-table-primary:hover:not(:disabled){background:#f0cc86;}.ds-table-primary:focus-visible{outline:3px solid #ffe1a0;outline-offset:4px;}.ds-table-primary:disabled{opacity:.45;cursor:not-allowed;}@media(prefers-reduced-motion:reduce){.ds-table-primary{transition:none;}}"
+    },
+    {
+      "name": "Table secondary action",
+      "kind": "button",
+      "refersTo": "table-secondary",
+      "description": "Active-round action with stable position and explicit disabled state.",
+      "html": "<button class=\"ds-table-secondary\">Raise 2\u00d7 \u20b940</button>",
+      "css": ".ds-table-secondary{display:inline-flex;align-items:center;justify-content:center;gap:3px;padding:12px 18px;min-height:46px;border:0;border-radius:10px;cursor:pointer;transition:background .15s;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;font-size:14px;font-weight:600;background:#34281c;color:#fbf3e5;}.ds-table-secondary:hover:not(:disabled){background:#4c3824;}.ds-table-secondary:focus-visible{outline:3px solid #ffe1a0;outline-offset:4px;}.ds-table-secondary:disabled{opacity:.45;cursor:not-allowed;}@media(prefers-reduced-motion:reduce){.ds-table-secondary{transition:none;}}"
+    },
+    {
+      "name": "Pack action",
+      "kind": "button",
+      "refersTo": "table-pack",
+      "description": "Active-round action with stable position and explicit disabled state.",
+      "html": "<button class=\"ds-table-pack\">Pack</button>",
+      "css": ".ds-table-pack{display:inline-flex;align-items:center;justify-content:center;gap:3px;padding:12px 18px;min-height:46px;border:0;border-radius:10px;cursor:pointer;transition:background .15s;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;font-size:14px;font-weight:600;background:#49252a;color:#ffb6b6;}.ds-table-pack:hover:not(:disabled){background:#633037;}.ds-table-pack:focus-visible{outline:3px solid #ffe1a0;outline-offset:4px;}.ds-table-pack:disabled{opacity:.45;cursor:not-allowed;}@media(prefers-reduced-motion:reduce){.ds-table-pack{transition:none;}}"
+    },
+    {
+      "name": "Table navigation control",
+      "kind": "nav",
+      "description": "Header icon link used for table back/history navigation.",
+      "html": "<a class=\"ds-table-nav\" href=\"#\" aria-label=\"Back to games\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"m12 19-7-7 7-7M5 12h14\"/></svg></a>",
+      "css": ".ds-table-nav{display:grid;place-items:center;min-height:44px;min-width:44px;border-radius:12px;color:#c3b69f;background:#2b221a;}.ds-table-nav:hover{background:#3a2d20;color:#fbf3e5;}.ds-table-nav:focus-visible{outline:3px solid #ffe1a0;outline-offset:4px;}"
+    },
+    {
+      "name": "Current-seat status",
+      "kind": "chip",
+      "description": "Own current-turn label; opponents instead use Playing.",
+      "html": "<span class=\"ds-seat-status\">Your turn</span>",
+      "css": ".ds-seat-status{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;font-size:14px;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#1f160b;background:#f0c273;font-weight:750;padding:2px 9px;border-radius:5px;}"
+    },
+    {
+      "name": "Playing card",
+      "kind": "card",
+      "refersTo": "playing-card",
+      "description": "A server-provided face with rank and suit; matching joker ranks receive a labelled outline.",
+      "html": "<div class=\"ds-playing-card\" role=\"img\" aria-label=\"Ace of spades\"><span class=\"ds-card-corner\">A<span>\u2660</span></span><span class=\"ds-card-suit\" aria-hidden=\"true\">\u2660</span><span class=\"ds-card-bottom\" aria-hidden=\"true\">A</span></div>",
+      "css": ".ds-playing-card{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;width:64px;height:88px;border-radius:7px;background:#fffcf5;box-shadow:0 3px 8px #0005;position:relative;color:#1b2422;}.ds-card-corner{position:absolute;top:5px;left:6px;font-weight:750;font-size:17px;line-height:1;}.ds-card-corner span{display:block;font-size:14px;margin-top:3px;}.ds-card-suit{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:33px;}.ds-card-bottom{position:absolute;bottom:5px;right:6px;font-size:15px;font-weight:700;transform:rotate(180deg);}"
+    },
+    {
+      "name": "Setup field",
+      "kind": "input",
+      "refersTo": "setup-input",
+      "description": "Existing create-game field, outside the playing table.",
+      "html": "<input class=\"ds-setup-input\" aria-label=\"Game name\" placeholder=\"Friday Night Teen Patti\" />",
+      "css": ".ds-setup-input{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;width:100%;background:var(--color-slate-950,#070606);border:1px solid var(--color-slate-700,#3D2B18);border-radius:12px;padding:12px 16px;color:var(--color-white,#F5F1E8);transition:border-color .15s;}.ds-setup-input:focus-visible{outline:none;border-color:var(--color-emerald-500,#D7A656);}"
+    },
+    {
+      "name": "Setup card",
+      "kind": "card",
+      "refersTo": "setup-card",
+      "description": "Existing form-section container, outside the playing table.",
+      "html": "<section class=\"ds-setup-card\"><h2>Game Settings</h2><p>Classic \u00b7 Boot \u20b910</p></section>",
+      "css": ".ds-setup-card{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;background:var(--color-slate-900,#12100F);border:1px solid var(--color-slate-800,#1A1714);border-radius:16px;padding:24px;color:var(--color-white,#F5F1E8);}.ds-setup-card h2{font-size:18px;font-weight:600;color:var(--color-emerald-400,#F6E59B);margin:0 0 16px;}.ds-setup-card p{margin:0;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The warm black-and-gold table",
+    "overview": "This record captures the existing app identity and the implemented game-table extension. Warm near-black surfaces, cream text and gold controls continue the palette in `frontend/src/index.css`. The new green felt is specific to the card table; it does not replace the surrounding app's identity. This is a descriptive scan of the implementation, not a newly commissioned brand direction.\n\nThe table is an operating surface: the player's hand, stake, active turn and available actions take priority over decorative detail. Teen Patti Gold's official store screenshots informed the felt oval, radial seating, card fans and dedicated action row. No reference artwork or branding was copied. The table uses CSS geometry, suit characters and existing icon components rather than new image assets. No PRODUCT.md was supplied.",
+    "keyCharacteristics": [
+      "Warm black and gold app surfaces with a green felt table extension.",
+      "Radial seats with the signed-in participant anchored at the bottom.",
+      "Cream face-up cards, burgundy backs and labelled wild-card states.",
+      "Persistent action positions while an active participant waits for a turn.",
+      "Portrait mobile play with a separate full-size hand below the table."
+    ],
+    "rules": [
+      {
+        "name": "The state-plus-label Rule",
+        "body": "Gold highlights and suit colors accompany text or symbols: Your turn, Playing, Packed, Winner, WILD and the rank/suit description carry the meaning.",
+        "section": "colors"
+      },
+      {
+        "name": "The anchored-action Rule",
+        "body": "During an active round, keep Pack, Blind/Chaal, Raise and Show/Side show in stable positions for the active participant; disable ineligible controls without removing them.",
+        "section": "layout"
+      }
+    ],
+    "dos": [
+      "**Do** preserve the surrounding app's warm black/gold palette and system font stack.",
+      "**Do** keep the signed-in participant at the bottom of radial seating when they have a seat.",
+      "**Do** pair turn, concealment, pack and wild-card treatments with readable status or card descriptions.",
+      "**Do** keep the full-size participant hand separate from the small seat fans.",
+      "**Do** retain table keyboard focus and reduced-motion treatment when extending table controls.",
+      "**Do** preserve server-provided card visibility when adding UI views."
+    ],
+    "donts": [
+      "**Don't** treat historical emerald token names as permission to recolor the incumbent app green.",
+      "**Don't** turn the table's radial seating into the layout for unrelated app screens.",
+      "**Don't** fabricate or reveal concealed opponent cards in the client.",
+      "**Don't** label an opponent's current turn Your turn.",
+      "**Don't** move active-round betting actions when they become unavailable.",
+      "**Don't** introduce copied reference branding or artwork into this table."
+    ]
+  }
+}

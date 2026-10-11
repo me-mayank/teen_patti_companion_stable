@@ -1,6 +1,8 @@
 const Invitation = require('./invitation.model');
 const Game = require('../games/game.model');
 const { getIO } = require('../../shared/sockets');
+const mongoose = require('mongoose');
+const { fail } = require('../../shared/middleware/gameAccess.middleware');
 
 const inviteUsers = async (gameId, userIds, inviterId) => {
   const game = await Game.findById(gameId);
@@ -9,7 +11,9 @@ const inviteUsers = async (gameId, userIds, inviterId) => {
     throw new Error('Only the creator can invite players');
   }
 
-  const invitations = userIds.map((userId) => ({
+  if (!['CREATED', 'WAITING_FOR_PLAYERS'].includes(game.status)) throw fail('The table is closed to new invitations');
+  if (userIds.some(id => id.toString() === inviterId.toString())) throw fail('You already have a seat at this table');
+  const invitations = [...new Set(userIds)].map((userId) => ({
     gameId,
     invitedUserId: userId,
     invitedBy: inviterId,
@@ -51,48 +55,33 @@ const getInvitationsByGameId = async (gameId) => {
 };
 
 const respondToInvitation = async (invitationId, userId, status) => {
-  const invitation = await Invitation.findOne({
-    _id: invitationId,
-    invitedUserId: userId,
-  });
-
-  if (!invitation) {
-    throw new Error('Invitation not found or not yours');
-  }
-
-  if (invitation.status !== 'PENDING') {
-    throw new Error('Invitation already responded to');
-  }
-
-  invitation.status = status;
-  invitation.respondedAt = new Date();
-  await invitation.save();
-
-  if (status === 'ACCEPTED') {
-    // Add player to game participants
-    const game = await Game.findById(invitation.gameId);
-    if (game) {
-      const User = require('../users/user.model');
-      const user = await User.findById(userId);
-      
-      if (!user || user.globalBalance < game.bootAmount) {
-        throw new Error(`Insufficient wallet balance to join this game. Required: ₹${game.bootAmount}`);
+  const session = await mongoose.startSession();
+  let result;
+  try {
+    await session.withTransaction(async () => {
+      const invitation = await Invitation.findOne({ _id: invitationId, invitedUserId: userId }).session(session);
+      if (!invitation) throw fail('Invitation not found', 404);
+      if (invitation.status !== 'PENDING') throw fail('Invitation already responded to');
+      const game = await Game.findById(invitation.gameId).session(session);
+      if (!game || !['CREATED', 'WAITING_FOR_PLAYERS'].includes(game.status)) throw fail('The table is closed to new players');
+      if (status === 'ACCEPTED') {
+        const User = require('../users/user.model');
+        const user = await User.findById(userId).session(session);
+        if (!user || user.globalBalance < game.bootAmount) throw fail(`Insufficient balance to join. Required: ₹${game.bootAmount}`);
+        if (!game.participants.some(p => p.userId.toString() === userId.toString())) {
+          if (game.participants.length >= 6) throw fail('This table is full (six players)');
+          game.participants.push({ userId, balance: 0 });
+          await game.save({ session });
+        }
       }
-
-      const alreadyParticipant = game.participants.some(
-        (p) => p.userId.toString() === userId.toString()
-      );
-      if (!alreadyParticipant) {
-        game.participants.push({ userId: userId, balance: 0 });
-        await game.save();
-      }
-    }
-  }
-
-  // Notify clients
-  getIO().to(`game:${invitation.gameId}`).emit('game:update', { gameId: invitation.gameId });
-
-  return invitation;
+      invitation.status = status;
+      invitation.respondedAt = new Date();
+      await invitation.save({ session });
+      result = invitation;
+    });
+  } finally { await session.endSession(); }
+  getIO().to(`game:${result.gameId}`).emit('game:update', { gameId: result.gameId });
+  return result;
 };
 
 const getPendingInvitationsForUser = async (userId) => {

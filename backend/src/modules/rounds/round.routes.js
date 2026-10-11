@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const {
+  seeCards,
   bet,
   betTwice,
   pack,
@@ -20,6 +21,7 @@ const {
 } = require('./round.validation');
 
 router.route('/:id').get(protect, getRound);
+router.route('/:id/see-cards').post(protect, seeCards);
 router.route('/:id/bet').post(protect, bet);
 router.route('/:id/bet-twice').post(protect, betTwice);
 router.route('/:id/pack').post(protect, pack);

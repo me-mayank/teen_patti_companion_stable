@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import * as gamesApi from './games.api';
 import * as usersApi from '../users/users.api';
+import { invitePlayers } from '../invitations/invitations.api';
 import { ArrowLeft, Search, Check, AlertCircle } from 'lucide-react';
 
 const CreateGame = () => {
   const navigate = useNavigate();
   const [name, setName] = useState('');
+  const [mode, setMode] = useState('CLASSIC');
   const [bootAmount, setBootAmount] = useState(10);
   const [maxBetMultiplier, setMaxBetMultiplier] = useState(5);
   
@@ -48,17 +50,18 @@ const CreateGame = () => {
       return;
     }
 
+    if (selectedUserIds.length > 5) { setError('A table supports at most six players, including you.'); return; }
     setLoading(true);
     try {
       // 1. Create the game
       const newGame = await gamesApi.createGame({
         name,
+        mode,
         bootAmount: Number(bootAmount),
         maxBetMultiplier: Number(maxBetMultiplier),
       });
 
       // 2. Send invitations
-      const { invitePlayers } = await import('../invitations/invitations.api');
       await invitePlayers(newGame._id, selectedUserIds);
 
       // 3. Redirect to Invitation Management / Game Lobby
@@ -101,6 +104,7 @@ const CreateGame = () => {
                 <label className="block text-sm font-medium text-slate-400 mb-2">Game Name</label>
                 <input
                   type="text"
+                  maxLength={80}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors"
@@ -109,12 +113,24 @@ const CreateGame = () => {
                 />
               </div>
 
+              <fieldset>
+                <legend className="block text-sm font-medium text-slate-400 mb-2">Card mode</legend>
+                <div className="grid grid-cols-2 gap-3">
+                  {['CLASSIC', 'JOKER'].map(value => <label key={value} className={`cursor-pointer rounded-xl p-4 border ${mode === value ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-700 bg-slate-950'}`}>
+                    <input type="radio" name="mode" value={value} checked={mode === value} onChange={() => setMode(value)} className="mr-2 accent-emerald-500" />
+                    <span className="font-semibold">{value === 'CLASSIC' ? 'Classic' : 'Joker'}</span>
+                    <span className="block text-xs text-slate-400 mt-2">{value === 'CLASSIC' ? 'Standard three-card Teen Patti.' : 'A random rank becomes wild each round.'}</span>
+                  </label>)}
+                </div>
+                <p className="text-xs text-slate-400 mt-3">Three private cards are dealt automatically. Shows are compared by the game.</p>
+              </fieldset>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-400 mb-2">Boot Amount (₹)</label>
                   <input
                     type="number"
                     min="1"
+                    step="1"
                     value={bootAmount}
                     onChange={(e) => setBootAmount(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors"
@@ -127,6 +143,8 @@ const CreateGame = () => {
                     <input
                       type="number"
                       min="1"
+                      max="100"
+                      step="1"
                       value={maxBetMultiplier}
                       onChange={(e) => setMaxBetMultiplier(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-4 pr-12 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors"
