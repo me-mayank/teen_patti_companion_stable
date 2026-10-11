@@ -18,7 +18,8 @@ const roundSchema = new mongoose.Schema(
     },
     mode: { type: String, enum: ['CLASSIC', 'JOKER'], default: 'CLASSIC' },
     jokerCard: { rank: Number, suit: String },
-    completionReason: { type: String, enum: ['LAST_PLAYER', 'SHOW'] },
+    completionReason: { type: String, enum: ['LAST_PLAYER', 'SHOW', 'POT_LIMIT'] },
+    potLimit: { type: Number, min: 1 },
     potAmount: {
       type: Number,
       default: 0,
@@ -39,6 +40,7 @@ const roundSchema = new mongoose.Schema(
         userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         status: { type: String, enum: ['ACTIVE', 'PACKED', 'WINNER'], default: 'ACTIVE' },
         totalContribution: { type: Number, default: 0 },
+        winAmount: { type: Number, default: 0 },
         seenCards: { type: Boolean, default: false },
         revealed: { type: Boolean, default: false },
         cards: { type: [{ _id: false, rank: { type: Number, min: 2, max: 14 }, suit: { type: String, enum: ['S', 'H', 'D', 'C'] } }], select: false, default: undefined },

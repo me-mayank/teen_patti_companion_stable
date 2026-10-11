@@ -183,11 +183,11 @@ Seats combine a three-card fan, circular avatar/initial, name, status and amount
 
 ### Pot and joker indicator
 
-The pot combines a coin icon, Table pot label, large amount and blind-stake caption. Joker mode places one small face-up indicator beside it with a rank-is-wild label and All four suits caption. Mobile stacks the indicator card above its description. The wild indicator is separate from the players' card fans.
+The pot combines a coin icon, Table pot label, large amount, blind-stake caption and fixed 100× boot pot-limit caption. Joker mode places one small face-up indicator beside it with a rank-is-wild label and All four suits caption. Mobile stacks the indicator card above its description. The wild indicator is separate from the players' card fans.
 
 ### Round messages and action panel
 
-The action panel announces whose turn it is and shows four controls while the round and participant are active. Amounts reflect blind/seen stakes. Show/Side show carry explanatory titles and change according to the number of active players. Other disable reasons rely on state and the rules panel; the UI does not give every disabled control a dedicated explanation.
+The action panel announces whose turn it is and shows four controls while the round and participant are active. Amounts reflect blind/seen stakes, limited to the amount remaining before the pot cap. Near the cap, an explanation announces automatic comparison. Capped-round results identify the winner or each tied winner and their share. Show/Side show carry explanatory titles and change according to the number of active players. Other disable reasons rely on state and the rules panel; the UI does not give every disabled control a dedicated explanation.
 
 Completion replaces normal play with a winner message and host-only next-deal action. Digital Show reports automatic comparison; Side show presents accept/decline controls to its target and a resolved status after comparison. Earlier physical-card rounds retain their explicit manual-result flow. Rules and end-game confirmation are bounded in-flow panels, not overlay dialogs. Loading, unavailable-table, setup and finished-game states have their own centered messages/actions.
 

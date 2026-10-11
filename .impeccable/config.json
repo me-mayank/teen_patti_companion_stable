@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "gray-on-color",
+        "value": "*",
+        "files": [
+          "frontend/src/features/games/CreateGame.jsx"
+        ],
+        "createdAt": "2026-10-11T19:42:59.608Z",
+        "reason": "Agent reviewed: the reported existing submit button uses charcoal text on the project gold accent tokens, with deliberate readable contrast; Tailwind color names are remapped in index.css."
+      }
+    ]
+  }
+}

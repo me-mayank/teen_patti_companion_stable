@@ -55,12 +55,118 @@ beforeEach(async () => {
 test('deal stores unique cards, takes boot exactly once, keeps blind hands off HTTP and sockets', async () => {
   const round = await deal();
   expect(round.potAmount).toBe(30);
+  expect(round.potLimit).toBe(1000);
   expect(round.players.every(p=>!p.cards && !p.handRank && !p.seenCards)).toBe(true);
   const raw = await stored(round);
   expect(new Set(raw.players.flatMap(p=>p.cards).map(c=>`${c.rank}${c.suit}`)).size).toBe(9);
   expect(await Transaction.countDocuments({type:'BOOT'})).toBe(3);
   expect(emit.mock.calls.every(([,payload]) => !payload.round && !payload.players)).toBe(true);
   expect((await post(`/games/${game._id}/rounds`)).status).toBe(400);
+});
+
+// Grow the pot through real payments, so boundary checks also exercise the ledger.
+async function nearPotLimit(round) {
+  await Game.updateOne({ _id: game._id }, { $set: { maxBetMultiplier: 8 } });
+  let current = round;
+  for (let index = 0; index < 2; index++) {
+    const response = await post(`/rounds/${round._id}/bet-twice`, current.currentTurnIndex);
+    expect(response.status).toBe(200);
+    current = response.body;
+  }
+  while (current.potAmount + current.currentBet < current.potLimit) {
+    const response = await post(`/rounds/${round._id}/bet`, current.currentTurnIndex);
+    expect(response.status).toBe(200);
+    current = response.body;
+  }
+  return current;
+}
+
+test.each(['bet', 'bet-twice', 'side-show/request'])('%s stops at 100× boot, reveals active hands and pays once even with concurrent requests', async action => {
+  const round = await deal();
+  await forceHands(round, [cards('14S','14H','14D'), cards('13S','13H','13D'), cards('2S','5H','8D')]);
+  const current = await nearPotLimit(round);
+  expect(current.potAmount).toBe(970);
+  if (action === 'side-show/request') {
+    await post(`/rounds/${round._id}/see-cards`, current.currentTurnIndex);
+    await post(`/rounds/${round._id}/see-cards`, (current.currentTurnIndex + 2) % 3);
+  }
+  const [a, b] = await Promise.all([post(`/rounds/${round._id}/${action}`, current.currentTurnIndex), post(`/rounds/${round._id}/${action}`, current.currentTurnIndex)]);
+  expect([a.status, b.status].sort()).toEqual([200, 400]);
+  const result = a.status === 200 ? a.body : b.body;
+  expect(result.potAmount).toBe(1000);
+  expect(result.status).toBe('COMPLETED');
+  expect(result.completionReason).toBe('POT_LIMIT');
+  expect(result.winnerId._id).toBe(String(players[0]._id));
+  expect(result.players.every(p => p.cards?.length === 3 && p.revealed)).toBe(true);
+  expect(result.sideShowRequest?.result).not.toBe('PENDING');
+  const charges = await Transaction.find({ roundId: round._id, type: { $ne: 'ROUND_WIN' } }).sort({ createdAt: -1 });
+  expect(charges[0].amount).toBe(-30);
+  expect(await Transaction.countDocuments({ roundId: round._id, type: 'ROUND_WIN' })).toBe(1);
+  await expectBalanced(round._id);
+  const next = await deal();
+  expect(next.potAmount).toBe(30);
+  expect(next.potLimit).toBe(1000);
+});
+
+test('cap comparison uses jokers, excludes packed hands, and needs only the remaining balance for a seen payment', async () => {
+  await Game.updateOne({ _id: game._id }, { $set: { mode: 'JOKER', bootAmount: 7 } });
+  const round = await deal();
+  await Round.updateOne({ _id: round._id }, { $set: { jokerCard: { rank: 9, suit: 'C' } } });
+  await forceHands(round, [cards('14S','14H','14D'), cards('12S','12H','12D'), cards('9S','13H','13D')]);
+  await post(`/rounds/${round._id}/pack`, 0);
+  const current = await nearPotLimit({ ...round, currentTurnIndex: 1 });
+  expect(current.potLimit).toBe(700);
+  const payer = current.currentTurnIndex;
+  const raw = await stored(round);
+  await User.updateOne({ _id: players[payer]._id }, { $set: { globalBalance: raw.players[payer].totalContribution + 21 } });
+  await post(`/rounds/${round._id}/see-cards`, payer);
+  const response = await post(`/rounds/${round._id}/bet`, payer);
+  expect(response.status).toBe(200);
+  expect(response.body.potAmount).toBe(700);
+  expect(response.body.winnerId._id).toBe(String(players[2]._id));
+  expect(response.body.players[0].cards).toBeUndefined();
+  expect(response.body.players[1].cards).toHaveLength(3);
+  expect(response.body.players[2].handRank).toBe('Trail');
+  await expectBalanced(round._id);
+});
+
+test('at the cap a heads-up show splits equal hands instead of applying the requester tie rule', async () => {
+  const round = await deal();
+  await forceHands(round, [cards('2S','5H','8D'), cards('14S','12H','9D'), cards('14C','12D','9S')]);
+  await post(`/rounds/${round._id}/pack`, 0);
+  const current = await nearPotLimit({ ...round, currentTurnIndex: 1 });
+  const response = await post(`/rounds/${round._id}/show/request`, current.currentTurnIndex);
+  expect(response.status).toBe(200);
+  expect(response.body.completionReason).toBe('POT_LIMIT');
+  expect(response.body.winnerId).toBeUndefined();
+  expect(response.body.players.filter(p => p.status === 'WINNER').map(p => p.winAmount)).toEqual([500, 500]);
+  expect(response.body.players[0].cards).toBeUndefined();
+  await expectBalanced(round._id);
+});
+
+test('three equal best hands split the capped pot with a deterministic whole-rupee remainder', async () => {
+  const round = await deal();
+  await forceHands(round, [cards('14S','12H','9D'), cards('14C','12D','9S'), cards('14H','12S','9C')]);
+  const current = await nearPotLimit(round);
+  const response = await post(`/rounds/${round._id}/bet`, current.currentTurnIndex);
+  expect(response.status).toBe(200);
+  expect(response.body.players.map(p => p.winAmount)).toEqual([334, 333, 333]);
+  expect(response.body.players.every(p => p.status === 'WINNER')).toBe(true);
+  expect(await Transaction.countDocuments({ roundId: round._id, type: 'ROUND_WIN' })).toBe(3);
+  await expectBalanced(round._id);
+});
+
+test('an exact cap payment triggers comparison and older digital rounds acquire the boot-based cap', async () => {
+  await Game.updateOne({ _id: game._id }, { $set: { participants: game.participants.slice(0, 2), turnOrder: game.turnOrder.slice(0, 2) } });
+  const round = await deal();
+  await Round.updateOne({ _id: round._id }, { $unset: { potLimit: 1 } });
+  expect((await get(`/rounds/${round._id}`)).body.potLimit).toBe(1000);
+  const current = await nearPotLimit(round);
+  expect(current.potAmount).toBe(960);
+  const response = await post(`/rounds/${round._id}/bet`, current.currentTurnIndex);
+  expect(response.body.potAmount).toBe(1000);
+  expect(response.body.completionReason).toBe('POT_LIMIT');
+  await expectBalanced(round._id);
 });
 test('only host may deal, and outsiders cannot read rounds or game history', async () => {
   expect((await post(`/games/${game._id}/rounds`,1)).status).toBe(403);

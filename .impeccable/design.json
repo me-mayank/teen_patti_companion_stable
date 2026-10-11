@@ -407,7 +407,7 @@
       "name": "Table primary action",
       "kind": "button",
       "refersTo": "table-primary",
-      "description": "Active-round action with stable position and explicit disabled state.",
+      "description": "Active-round action with stable position and explicit disabled state. Payment amounts are capped to the remaining pot allowance.",
       "html": "<button class=\"ds-table-primary\">Chaal \u20b920</button>",
       "css": ".ds-table-primary{display:inline-flex;align-items:center;justify-content:center;gap:3px;padding:12px 18px;min-height:46px;border:0;border-radius:10px;cursor:pointer;transition:background .15s;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;font-size:14px;font-weight:600;background:#e3b86a;color:#281b0c;}.ds-table-primary:hover:not(:disabled){background:#f0cc86;}.ds-table-primary:focus-visible{outline:3px solid #ffe1a0;outline-offset:4px;}.ds-table-primary:disabled{opacity:.45;cursor:not-allowed;}@media(prefers-reduced-motion:reduce){.ds-table-primary{transition:none;}}"
     },
@@ -415,7 +415,7 @@
       "name": "Table secondary action",
       "kind": "button",
       "refersTo": "table-secondary",
-      "description": "Active-round action with stable position and explicit disabled state.",
+      "description": "Active-round action with stable position and explicit disabled state. Payment amounts are capped to the remaining pot allowance.",
       "html": "<button class=\"ds-table-secondary\">Raise 2\u00d7 \u20b940</button>",
       "css": ".ds-table-secondary{display:inline-flex;align-items:center;justify-content:center;gap:3px;padding:12px 18px;min-height:46px;border:0;border-radius:10px;cursor:pointer;transition:background .15s;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;font-size:14px;font-weight:600;background:#34281c;color:#fbf3e5;}.ds-table-secondary:hover:not(:disabled){background:#4c3824;}.ds-table-secondary:focus-visible{outline:3px solid #ffe1a0;outline-offset:4px;}.ds-table-secondary:disabled{opacity:.45;cursor:not-allowed;}@media(prefers-reduced-motion:reduce){.ds-table-secondary{transition:none;}}"
     },
@@ -462,7 +462,7 @@
       "kind": "card",
       "refersTo": "setup-card",
       "description": "Existing form-section container, outside the playing table.",
-      "html": "<section class=\"ds-setup-card\"><h2>Game Settings</h2><p>Classic \u00b7 Boot \u20b910</p></section>",
+      "html": "<section class=\"ds-setup-card\"><h2>Game Settings</h2><p>Classic \u00b7 Boot \u20b910 \u00b7 Pot limit \u20b91,000 (100\u00d7 boot)</p></section>",
       "css": ".ds-setup-card{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;background:var(--color-slate-900,#12100F);border:1px solid var(--color-slate-800,#1A1714);border-radius:16px;padding:24px;color:var(--color-white,#F5F1E8);}.ds-setup-card h2{font-size:18px;font-weight:600;color:var(--color-emerald-400,#F6E59B);margin:0 0 16px;}.ds-setup-card p{margin:0;}"
     }
   ],

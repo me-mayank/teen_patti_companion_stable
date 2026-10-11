@@ -154,6 +154,7 @@ const CreateGame = () => {
                   </div>
                 </div>
               </div>
+              <p className="text-xs text-slate-400">Pot limit: ₹{(Number(bootAmount) * 100).toLocaleString('en-IN')} (100× boot). At the limit, active hands are compared automatically.</p>
             </div>
           </div>
 

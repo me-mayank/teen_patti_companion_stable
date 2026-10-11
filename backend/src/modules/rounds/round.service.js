@@ -24,6 +24,12 @@ async function availableBalance(userId, session) {
 
 async function charge(session, game, round, player, amount, type) {
   if (!Number.isSafeInteger(amount) || amount <= 0) throw fail('Invalid bet amount');
+  // Older physical-card rounds keep their manual flow. Digital rounds use a fixed cap.
+  if (round.players.every(p => p.cards?.length === 3)) {
+    round.potLimit = round.potLimit || round.startingBet * 100;
+    amount = Math.min(amount, Math.max(0, round.potLimit - round.potAmount));
+    if (amount === 0) return completeAtPotLimit(session, round);
+  }
   // All wallet spending uses the same user write, so concurrent tables conflict and retry.
   await User.updateOne({ _id: player.userId }, { $inc: { __v: 1 } }, { session });
   const balance = await availableBalance(player.userId, session);
@@ -31,16 +37,42 @@ async function charge(session, game, round, player, amount, type) {
   await recordTransaction(session, { userId: player.userId, gameId: game._id, roundId: round._id, type, amount: -amount });
   player.totalContribution += amount;
   round.potAmount += amount;
+  if (round.potLimit && round.potAmount >= round.potLimit) return completeAtPotLimit(session, round);
+  return false;
 }
 
 async function complete(session, round, winnerId, reason) {
+  const winner = round.players.find(p => idOf(p.userId) === idOf(winnerId));
+  await awardPot(session, round, [winner], reason);
+}
+
+async function awardPot(session, round, winners, reason) {
   round.status = 'COMPLETED';
-  round.winnerId = winnerId;
+  round.winnerId = winners.length === 1 ? winners[0].userId : undefined;
   round.completionReason = reason;
   round.endedAt = new Date();
-  const winner = round.players.find(p => idOf(p.userId) === idOf(winnerId));
-  winner.status = 'WINNER';
-  await recordTransaction(session, { userId: winnerId, gameId: round.gameId, roundId: round._id, type: 'ROUND_WIN', amount: round.potAmount });
+  const share = Math.floor(round.potAmount / winners.length);
+  const remainder = round.potAmount % winners.length;
+  for (const [index, winner] of winners.entries()) {
+    winner.status = 'WINNER';
+    winner.winAmount = share + (index < remainder ? 1 : 0);
+    await recordTransaction(session, { userId: winner.userId, gameId: round.gameId, roundId: round._id, type: 'ROUND_WIN', amount: winner.winAmount });
+  }
+}
+
+async function completeAtPotLimit(session, round) {
+  const active = round.players.filter(p => p.status === 'ACTIVE');
+  let winners = [];
+  for (const player of active) {
+    player.revealed = true;
+    const comparison = winners.length ? compareHands(player.cards, winners[0].cards, round.jokerCard?.rank) : 1;
+    if (comparison > 0) winners = [player];
+    else if (comparison === 0) winners.push(player);
+  }
+  for (const player of active) if (!winners.includes(player)) player.status = 'PACKED';
+  round.sideShowRequest = undefined;
+  await awardPot(session, round, winners, 'POT_LIMIT');
+  return true;
 }
 
 function activeTurn(round, game, userId) {
@@ -93,7 +125,7 @@ async function startRound(gameId, userId) {
       if (order.length < 2 || order.length > 6 || new Set(order).size !== order.length || order.length !== participantIds.length || order.some(id => !participantIds.includes(id))) throw fail('Set a valid turn order for 2 to 6 players');
       const { hands, jokerCard } = dealCards(order.length, game.mode || 'CLASSIC');
       const round = new Round({ gameId, roundNumber: game.currentRoundNumber + 1, mode: game.mode || 'CLASSIC', jokerCard,
-        status: 'ACTIVE', potAmount: 0, currentBet: game.bootAmount, startingBet: game.bootAmount,
+        status: 'ACTIVE', potAmount: 0, potLimit: game.bootAmount * 100, currentBet: game.bootAmount, startingBet: game.bootAmount,
         currentTurnIndex: game.currentRoundNumber % order.length, startedAt: new Date(),
         players: game.turnOrder.map((userId, index) => ({ userId, cards: hands[index], status: 'ACTIVE', totalContribution: 0, seenCards: false })) });
       for (const player of round.players) await charge(session, game, round, player, game.bootAmount, 'BOOT');
@@ -109,14 +141,14 @@ async function startRound(gameId, userId) {
 
 const bet = (roundId, userId) => mutate(roundId, userId, async (session, round, game) => {
   const player = activeTurn(round, game, userId);
-  await charge(session, game, round, player, stake(round, player), 'BET');
+  if (await charge(session, game, round, player, stake(round, player), 'BET')) return;
   advance(round);
 });
 const betTwice = (roundId, userId) => mutate(roundId, userId, async (session, round, game) => {
   const player = activeTurn(round, game, userId);
   const raised = round.currentBet * 2;
   if (raised > round.startingBet * game.maxBetMultiplier) throw fail('Raise exceeds the table limit');
-  await charge(session, game, round, player, raised * (player.seenCards ? 2 : 1), 'BET_TWICE');
+  if (await charge(session, game, round, player, raised * (player.seenCards ? 2 : 1), 'BET_TWICE')) return;
   round.currentBet = raised;
   advance(round);
 });
@@ -139,7 +171,7 @@ const requestSideShow = (roundId, userId) => mutate(roundId, userId, async (sess
   if (round.players.filter(p => p.status === 'ACTIVE').length <= 2) throw fail('Side show requires at least three active players');
   const target = round.players[turns.getPreviousActivePlayerIndex(round.players, round.currentTurnIndex)];
   if (!player.seenCards || !target.seenCards) throw fail('You and the previous active player must both have seen your cards');
-  await charge(session, game, round, player, stake(round, player), 'SHOW_FEE');
+  if (await charge(session, game, round, player, stake(round, player), 'SHOW_FEE')) return;
   round.status = 'SIDE_SHOW_PENDING';
   round.sideShowRequest = { requestedBy: userId, targetPlayer: target.userId, result: 'PENDING' };
 });
@@ -167,7 +199,7 @@ const requestShow = (roundId, userId) => mutate(roundId, userId, async (session,
   if (active.length !== 2) throw fail('Show requires exactly two active players');
   const other = active.find(p => idOf(p.userId) !== idOf(userId));
   if (player.seenCards && !other.seenCards) throw fail('A seen player cannot request a show against a blind player');
-  await charge(session, game, round, player, stake(round, player), 'SHOW_FEE');
+  if (await charge(session, game, round, player, stake(round, player), 'SHOW_FEE')) return;
   if (active.some(p => p.cards?.length !== 3)) { round.status = 'SHOW_PENDING'; return; }
   active.forEach(p => { p.revealed = true; });
   const winner = compareHands(player.cards, other.cards, round.jokerCard?.rank) > 0 ? player : other;
@@ -203,6 +235,7 @@ async function getRoundById(roundId, userId) {
   const game = await Game.findById(round.gameId);
   await canAccessGame(game, userId);
   const view = roundForViewer(round, userId);
+  if (!view.potLimit && round.players.every(p => p.cards?.length === 3)) view.potLimit = round.startingBet * 100;
   view.availableBalance = await availableBalance(userId, null);
   return view;
 }
