@@ -45,6 +45,7 @@ const roundSchema = new mongoose.Schema(
         seenCards: { type: Boolean, default: false },
         lastBet: { type: String, enum: ['BLIND', 'CHAAL'] },
         revealed: { type: Boolean, default: false },
+        sideShowViewers: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], select: false, default: undefined },
         cards: { type: [{ _id: false, rank: { type: Number, min: 2, max: 14 }, suit: { type: String, enum: ['S', 'H', 'D', 'C'] } }], select: false, default: undefined },
       },
     ],

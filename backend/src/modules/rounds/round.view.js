@@ -10,10 +10,12 @@ function roundForViewer(round, viewerId) {
   view.players = view.players.map(player => {
     player = { ...player };
     const visible = (idOf(player.userId) === idOf(viewerId) && player.seenCards)
+      || player.sideShowViewers?.some(id => idOf(id) === idOf(viewerId))
       || (view.status === 'COMPLETED' && player.revealed);
     const cards = player.cards;
     delete player.cards;
     delete player.handRank;
+    delete player.sideShowViewers;
     if (visible && cards?.length === 3) {
       player.cards = cards;
       player.handRank = evaluateHand(cards, view.jokerCard?.rank).label;

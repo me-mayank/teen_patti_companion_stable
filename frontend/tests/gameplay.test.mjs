@@ -99,15 +99,11 @@ function board() {
     pending.forEach(effect => effect());
     return tree;
   }
-  function find(type, node) {
-    if (!node || typeof node !== 'object') return;
-    if (node.type === type) return node;
-    for (const child of [node.props?.children].flat(Infinity)) {
-      const found = find(type, child);
-      if (found) return found;
-    }
+  function findAll(type, node) {
+    if (!node || typeof node !== 'object') return [];
+    return [...(node.type === type ? [node] : []), ...[node.props?.children].flat(Infinity).flatMap(child => findAll(type, child))];
   }
-  return { render, find: type => find(type, tree), calls, getters, socket, emit: (event, payload = { gameId: 'table' }) => listeners.get(event)?.(payload),
+  return { render, find: type => findAll(type, tree)[0], findAll: type => findAll(type, tree), calls, getters, socket, emit: (event, payload = { gameId: 'table' }) => listeners.get(event)?.(payload),
     setAction(fn) { action = fn; }, cleanup() { cleanups.forEach(fn => fn?.()); } };
 }
 
@@ -134,6 +130,34 @@ test('See cards, bets and Show update from the action response without waiting f
       assert.equal(table.find('CardHand').props.cards.length, 3);
       assert.equal(table.find('ActionPanel').props.isProcessing, false);
     }
+    table.cleanup();
+  }
+});
+
+test('accepted side shows display the compared hand for both participants, including the packed player', async () => {
+  const own = [{ rank: 14, suit: 'S' }, { rank: 12, suit: 'H' }, { rank: 9, suit: 'D' }];
+  const other = [{ rank: 14, suit: 'C' }, { rank: 12, suit: 'D' }, { rank: 9, suit: 'S' }];
+  for (const role of ['requester', 'target', 'bystander']) {
+    const table = board();
+    const result = { ...initialRound, currentTurnIndex: 1, sideShowRequest: {
+      requestedBy: role === 'requester' ? 'me' : 'other', targetPlayer: role === 'target' ? 'me' : 'target', result: 'TARGET_WON',
+    }, players: [
+      { userId: { _id: 'me', name: 'Me' }, status: role === 'requester' ? 'PACKED' : 'ACTIVE', seenCards: true, cards: own, handRank: 'High card' },
+      { userId: { _id: 'other', name: 'Opponent' }, status: role === 'target' ? 'PACKED' : 'ACTIVE', seenCards: true,
+        ...(role !== 'bystander' ? { cards: other, handRank: 'High card' } : {}) },
+      { userId: { _id: 'target', name: 'Third player' }, status: 'ACTIVE', seenCards: false },
+    ] };
+    table.getters.round = () => Promise.resolve(initialRound);
+    table.render(); await tick(); table.render();
+    table.getters.round = () => Promise.resolve(result);
+    table.emit('round:update'); await tick(); table.render();
+    const hands = table.findAll('CardHand');
+    assert.equal(hands.length, role === 'bystander' ? 1 : 2);
+    assert.deepEqual(hands[0].props.cards, own);
+    if (role !== 'bystander') assert.deepEqual(hands[1].props.cards, other);
+    const seats = table.findAll('PlayerCircle');
+    assert.equal(Boolean(seats.find(seat => seat.props.player.userId._id === 'other').props.player.cards), role !== 'bystander');
+    assert.equal(seats.find(seat => seat.props.player.userId._id === 'target').props.player.cards, undefined);
     table.cleanup();
   }
 });
