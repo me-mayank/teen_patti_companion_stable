@@ -32,14 +32,14 @@ For a complete local preview without configuring a database:
 - Digital rounds have a fixed pot limit of **100× the round's boot amount**, including boots and comparison fees. The final payment is limited to the remaining amount. Reaching the cap immediately reveals and compares all active hands (using the joker rank when applicable), without another fee or side-show acceptance. Packed hands remain private. Equal best hands split the pot in whole rupees; any remainder goes to tied winners in table seat order. The normal requester-loses-a-tie rule applies only to comparisons below the cap. Payments, payouts and round completion commit together.
 - Only the current active player may bet, raise, pack, or request comparison. Insufficient funds leave the round and ledger unchanged. Availability includes unsettled balances at other tables.
 - Side show needs at least three active players. The requester and previous active player must both be seen. The requester pays the seen stake; the target accepts or declines. Accepted comparisons automatically pack the lower hand; ties pack the requester. Declined requests retain their fee and advance the turn. Cards remain private.
-- Show needs exactly two active players. A blind player may show either opponent; a seen player may only show another seen player. The requester pays their stake. Hands are compared automatically; ties award the non-requester. Only the two showdown hands are revealed.
+- Show needs exactly two active players. On their turn, either player can force a show, including a seen player against a blind opponent; no opponent acceptance is needed. The requester pays their usual stake (blind: 1×, seen: 2×). Hands are compared automatically; ties award the non-requester. Only the two showdown hands are revealed.
 - When everyone else packs, the last player wins without revealing their hand. The host deals the next round or ends the game and settles balances exactly once.
 - Legacy physical-card rounds remain finishable through the existing manual controls. Digital rounds never accept a client-selected winner.
 
 ## Verification
 
 - Backend: `npm test -- --runInBand`. Integration tests run against their own temporary MongoDB replica set and never use `MONGODB_URI`.
-- Frontend: `npm run build` and `npm run lint`.
+- Frontend: `npm test`, `npm run build` and `npm run lint`.
 - Tests cover all 22,100 standard hands, joker substitutions, unique deals, HTTP card privacy and permissions, authenticated sockets, full invitation/setup flow, fees, payouts, insufficient funds, concurrent requests, and legacy compatibility.
 
-Realtime events invalidate table state without carrying private cards. Authenticated HTTP responses return only the viewer's seen hand and publicly revealed showdown hands. Reconnect joins the room again; periodic refresh provides a fallback.
+Actions apply their authenticated round response immediately, without extra table reads before re-enabling controls. Realtime round events refresh only the round, and overlapping notifications queue at most one follow-up read. Reads started before an action cannot overwrite its confirmed response. Events never carry private cards; HTTP responses return only the viewer's seen hand and publicly revealed showdown hands. Reconnect joins the room again; periodic full-table refresh provides a fallback.

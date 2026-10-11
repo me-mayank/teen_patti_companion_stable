@@ -46,12 +46,7 @@ const getGameById = async (gameId, userId) => {
 };
 
 const getCurrentRoundForGame = async (gameId, userId) => {
-  const game = await requireGameAccess(gameId, userId);
-  if (game.currentRoundNumber === 0) return null;
-  const Round = require('../rounds/round.model');
-  const round = await Round.findOne({ gameId, roundNumber: game.currentRoundNumber });
-  if (!round) return null;
-  return require('../rounds/round.service').getRoundById(round._id, userId);
+  return require('../rounds/round.service').getCurrentRoundForGame(gameId, userId);
 };
 
 async function configure(gameId, userId, update) {

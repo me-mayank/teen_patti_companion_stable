@@ -7,7 +7,14 @@ const turns = require('./turnManager.service');
 const { getIO } = require('../../shared/sockets');
 const { dealCards, compareHands } = require('../cards/cards.service');
 const { roundForViewer, idOf } = require('./round.view');
-const { fail, canAccessGame } = require('../../shared/middleware/gameAccess.middleware');
+const { fail, canAccessGame, requireGameAccess } = require('../../shared/middleware/gameAccess.middleware');
+
+const publicPlayerFields = 'name username profilePicture';
+const playerPopulation = [
+  { path: 'players.userId', select: publicPlayerFields },
+  { path: 'winnerId', select: publicPlayerFields },
+];
+const readRound = query => query.select('+players.cards').populate(playerPopulation).lean();
 
 // Notifications only invalidate state. Private hands are fetched through authenticated HTTP.
 function notify(gameId) {
@@ -16,9 +23,10 @@ function notify(gameId) {
 }
 
 async function availableBalance(userId, session) {
-  const user = await User.findById(userId).session(session);
+  const user = await User.findById(userId).select('globalBalance').session(session).lean();
   if (!user) throw fail('Player not found', 404);
-  const games = await Game.find({ 'participants.userId': userId, status: { $nin: ['ENDED', 'ARCHIVED'] } }).session(session);
+  const games = await Game.find({ 'participants.userId': userId, status: { $nin: ['ENDED', 'ARCHIVED'] } })
+    .select('participants.userId participants.balance').session(session).lean();
   return user.globalBalance + games.reduce((sum, game) => sum + (game.participants.find(p => idOf(p.userId) === idOf(userId))?.balance || 0), 0);
 }
 
@@ -91,25 +99,27 @@ const stake = (round, player) => round.currentBet * (player.seenCards ? 2 : 1);
 
 async function mutate(roundId, userId, action) {
   const session = await mongoose.startSession();
-  let gameId;
+  let committedRound, committedGame;
   try {
     await session.withTransaction(async () => {
       const round = await Round.findById(roundId).select('+players.cards').session(session);
       if (!round) throw fail('Round not found', 404);
       const game = await Game.findById(round.gameId).session(session);
       await canAccessGame(game, userId);
-      gameId = game._id;
       await action(session, round, game);
       await round.save({ session });
+      committedRound = round;
+      committedGame = game;
     });
   } finally { await session.endSession(); }
-  notify(gameId);
-  return getRoundById(roundId, userId);
+  notify(committedGame._id);
+  const round = await Round.populate(committedRound.toObject(), playerPopulation);
+  return roundViewWithBalance(round, committedGame, userId);
 }
 
 async function startRound(gameId, userId) {
   const session = await mongoose.startSession();
-  let roundId;
+  let committedRound, committedGame;
   try {
     await session.withTransaction(async () => {
       const game = await Game.findById(gameId).session(session);
@@ -132,11 +142,13 @@ async function startRound(gameId, userId) {
       await round.save({ session });
       game.currentRoundNumber = round.roundNumber;
       await game.save({ session });
-      roundId = round._id;
+      committedRound = round;
+      committedGame = game;
     });
   } finally { await session.endSession(); }
   notify(gameId);
-  return getRoundById(roundId, userId);
+  const round = await Round.populate(committedRound.toObject(), playerPopulation);
+  return roundViewWithBalance(round, committedGame, userId);
 }
 
 const bet = (roundId, userId) => mutate(roundId, userId, async (session, round, game) => {
@@ -198,7 +210,6 @@ const requestShow = (roundId, userId) => mutate(roundId, userId, async (session,
   const active = round.players.filter(p => p.status === 'ACTIVE');
   if (active.length !== 2) throw fail('Show requires exactly two active players');
   const other = active.find(p => idOf(p.userId) !== idOf(userId));
-  if (player.seenCards && !other.seenCards) throw fail('A seen player cannot request a show against a blind player');
   if (await charge(session, game, round, player, stake(round, player), 'SHOW_FEE')) return;
   if (active.some(p => p.cards?.length !== 3)) { round.status = 'SHOW_PENDING'; return; }
   active.forEach(p => { p.revealed = true; });
@@ -229,14 +240,24 @@ const submitSideShowResult = (roundId, userId, loserId) => mutate(roundId, userI
   advance(round);
 });
 async function getRoundById(roundId, userId) {
-  const round = await Round.findById(roundId).select('+players.cards')
-    .populate('players.userId', 'name username profilePicture').populate('winnerId', 'name username profilePicture');
+  const round = await readRound(Round.findById(roundId));
   if (!round) throw fail('Round not found', 404);
-  const game = await Game.findById(round.gameId);
+  const game = await Game.findById(round.gameId).select('createdBy participants.userId').lean();
+  return roundViewWithBalance(round, game, userId);
+}
+
+async function getCurrentRoundForGame(gameId, userId) {
+  const game = await requireGameAccess(gameId, userId);
+  if (game.currentRoundNumber === 0) return null;
+  const round = await readRound(Round.findOne({ gameId, roundNumber: game.currentRoundNumber }));
+  return round ? roundViewWithBalance(round, game, userId) : null;
+}
+
+async function roundViewWithBalance(round, game, userId) {
   await canAccessGame(game, userId);
   const view = roundForViewer(round, userId);
   if (!view.potLimit && round.players.every(p => p.cards?.length === 3)) view.potLimit = round.startingBet * 100;
   view.availableBalance = await availableBalance(userId, null);
   return view;
 }
-module.exports = { startRound, bet, betTwice, pack, seeCards, requestSideShow, respondSideShow, submitSideShowResult, requestShow, submitShowResult, getRoundById };
+module.exports = { startRound, bet, betTwice, pack, seeCards, requestSideShow, respondSideShow, submitSideShowResult, requestShow, submitShowResult, getRoundById, getCurrentRoundForGame };
