@@ -188,6 +188,28 @@ test('seeing cards works off-turn, reveals only own cards and charges seen stake
   expect(bet.body.players[1].totalContribution).toBe(30);
   expect(bet.body.availableBalance).toBe(970);
 });
+
+test('card reveal and table refresh avoid re-reading rounds and games already loaded', async () => {
+  const round = await deal();
+  const queries = [];
+  const previousDebug = mongoose.get('debug');
+  mongoose.set('debug', (collection, method) => { if (method === 'findOne') queries.push(collection); });
+  try {
+    const seen = await post(`/rounds/${round._id}/see-cards`, 1);
+    expect(seen.status).toBe(200);
+    expect(seen.body.players[1].cards).toHaveLength(3);
+    expect(seen.body.players[0].cards).toBeUndefined();
+    expect(queries.filter(name => name === 'rounds')).toHaveLength(1);
+    expect(queries.filter(name => name === 'games')).toHaveLength(1);
+    queries.length = 0;
+    const refreshed = await get(`/games/${game._id}/rounds/current`, 1);
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body.players[1].cards).toHaveLength(3);
+    expect(refreshed.body.availableBalance).toBe(990);
+    expect(queries.filter(name => name === 'rounds')).toHaveLength(1);
+    expect(queries.filter(name => name === 'games')).toHaveLength(1);
+  } finally { mongoose.set('debug', previousDebug); }
+});
 test('turn enforcement and raise cap do not alter the ledger on rejection', async () => {
   const round = await deal();
   expect((await post(`/rounds/${round._id}/bet`,1)).status).toBe(403);
@@ -222,16 +244,43 @@ test('show compares actual hands, reveals contenders only and rejects client-sel
   expect((await post(`/rounds/${round._id}/show/result`,2,{winnerUserId:String(players[2]._id)})).status).toBe(403);
   await expectBalanced(round._id);
 });
-test('equal hands award a show to the non-requester; a seen player cannot show a blind player', async () => {
+test('equal hands award a show to the non-requester when both players are seen', async () => {
   const round = await deal();
   await forceHands(round,[cards('2S','5H','8D'),cards('14S','12H','9D'),cards('14C','12D','9S')]);
   await post(`/rounds/${round._id}/pack`,0);
   await post(`/rounds/${round._id}/see-cards`,1);
-  expect((await post(`/rounds/${round._id}/show/request`,1)).status).toBe(400);
   await post(`/rounds/${round._id}/see-cards`,2);
   const show = await post(`/rounds/${round._id}/show/request`,1);
   expect(show.body.winnerId._id).toBe(String(players[2]._id));
   expect(show.body.potAmount).toBe(50);
+});
+
+test.each(['CLASSIC', 'JOKER'])('a seen player can force a show against a blind opponent in %s', async mode => {
+  await Game.updateOne({ _id: game._id }, { $set: { mode } });
+  const round = await deal();
+  if (mode === 'JOKER') await Round.updateOne({ _id: round._id }, { $set: { jokerCard: { rank: 9, suit: 'C' } } });
+  await forceHands(round, [cards('2S','5H','8D'), mode === 'JOKER' ? cards('9S','14H','14D') : cards('14S','14H','14D'), cards('13S','13H','13D')]);
+  expect((await post(`/rounds/${round._id}/show/request`, 0)).status).toBe(400);
+  expect(await Transaction.countDocuments({ roundId: round._id, type: 'SHOW_FEE' })).toBe(0);
+  await post(`/rounds/${round._id}/pack`, 0);
+  const seen = await post(`/rounds/${round._id}/see-cards`, 1);
+  expect(seen.body.players[2].seenCards).toBe(false);
+  expect(seen.body.players[2].cards).toBeUndefined();
+  expect((await post(`/rounds/${round._id}/show/request`, 2)).status).toBe(403);
+  const show = await post(`/rounds/${round._id}/show/request`, 1);
+  expect(show.status).toBe(200);
+  expect(show.body.status).toBe('COMPLETED');
+  expect(show.body.completionReason).toBe('SHOW');
+  expect(show.body.winnerId._id).toBe(String(players[1]._id));
+  expect(show.body.potAmount).toBe(50);
+  expect(show.body.players[0].cards).toBeUndefined();
+  expect(show.body.players[1].handRank).toBe('Trail');
+  expect(show.body.players[2].cards).toHaveLength(3);
+  expect(show.body.players[2].seenCards).toBe(false);
+  const fees = await Transaction.find({ roundId: round._id, type: 'SHOW_FEE' });
+  expect(fees).toHaveLength(1);
+  expect(fees[0].amount).toBe(-20);
+  await expectBalanced(round._id);
 });
 test('accepted side show compares hands privately, charges once and packs the requester on ties', async () => {
   const round = await deal();

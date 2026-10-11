@@ -9,6 +9,7 @@ import PlayerCircle from './components/PlayerCircle';
 import PotArea from './components/PotArea';
 import ActionPanel from './components/ActionPanel';
 import PlayingCard, { CardHand, rankLabel } from './components/PlayingCard';
+import { createTableSync } from './tableSync';
 import './table.css';
 
 const idOf = value => String(value?._id || value || '');
@@ -26,25 +27,27 @@ export default function GameBoard() {
   const [rules, setRules] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const busy = useRef(false);
-  const requestId = useRef(0);
+  const tableSync = useRef(null);
 
-  const fetchGameState = useCallback(async () => {
-    const request = ++requestId.current;
-    try {
-      const g = await gamesApi.getGameById(gameId);
-      const r = g.status === 'ACTIVE' || g.status === 'ENDED' ? await gamesApi.getCurrentRound(gameId) : null;
-      if (request !== requestId.current) return;
-      setGame(g); setRound(r); setError('');
-    } catch (err) {
-      if (request === requestId.current) setError(err.response?.data?.message || 'The table could not be loaded. Check your connection and retry.');
-    } finally { if (request === requestId.current) setLoading(false); }
-  }, [gameId]);
+  const fetchGameState = useCallback((roundOnly = false) => tableSync.current?.refresh(roundOnly === true), []);
 
   useEffect(() => {
-    setLoading(true); fetchGameState();
+    const sync = createTableSync({
+      loadGame: () => gamesApi.getGameById(gameId),
+      loadRound: () => gamesApi.getCurrentRound(gameId),
+      onState: state => {
+        if (state.game) setGame(state.game);
+        setRound(state.round);
+      },
+      onError: err => setError(err ? err.response?.data?.message || 'The table could not be loaded. Check your connection and retry.' : ''),
+      onLoaded: () => setLoading(false),
+    });
+    tableSync.current = sync;
+    busy.current = false; setProcessing(false);
+    setLoading(true); setGame(null); setRound(null); fetchGameState();
     const timer = setInterval(fetchGameState, 10000);
-    return () => { clearInterval(timer); requestId.current++; };
-  }, [fetchGameState]);
+    return () => { clearInterval(timer); sync.dispose(); };
+  }, [gameId, fetchGameState]);
   useEffect(() => {
     if (!socket) return;
     const join = () => {
@@ -52,23 +55,31 @@ export default function GameBoard() {
       socket.emit('joinGame', gameId, response => { if (!response?.ok) { setConnected(false); setError(response?.message || 'Could not join the table'); } else fetchGameState(); });
     };
     const disconnect = () => setConnected(false);
-    const update = payload => { if (!payload?.gameId || idOf(payload.gameId) === gameId) fetchGameState(); };
+    const updateRound = payload => { if (!payload?.gameId || idOf(payload.gameId) === gameId) fetchGameState(true); };
+    const updateGame = payload => { if (!payload?.gameId || idOf(payload.gameId) === gameId) fetchGameState(); };
     socket.on('connect', join); socket.on('disconnect', disconnect); socket.on('connect_error', disconnect);
-    for (const event of ['round:update', 'game:update', 'round:completed']) socket.on(event, update);
+    for (const event of ['round:update', 'round:completed']) socket.on(event, updateRound);
+    socket.on('game:update', updateGame);
     if (socket.connected) join();
     return () => {
       socket.emit('leaveGame', gameId);
       socket.off('connect', join); socket.off('disconnect', disconnect); socket.off('connect_error', disconnect);
-      for (const event of ['round:update', 'game:update', 'round:completed']) socket.off(event, update);
+      for (const event of ['round:update', 'round:completed']) socket.off(event, updateRound);
+      socket.off('game:update', updateGame);
     };
   }, [socket, gameId, fetchGameState]);
 
   const perform = async operation => {
     if (busy.current) return;
     busy.current = true; setProcessing(true); setError('');
-    try { await operation(); await fetchGameState(); }
-    catch (err) { setError(err.response?.data?.message || 'The action could not be completed. Please try again.'); }
-    finally { busy.current = false; setProcessing(false); }
+    const sync = tableSync.current;
+    sync.pause();
+    try { sync.resume(await operation()); }
+    catch (err) {
+      sync.resume(undefined, false);
+      if (sync === tableSync.current) setError(err.response?.data?.message || 'The action could not be completed. Please try again.');
+    }
+    finally { if (sync === tableSync.current) { busy.current = false; setProcessing(false); } }
   };
   const handleAction = action => {
     const actions = { BET: roundApi.bet, BET_TWICE: roundApi.betTwice, PACK: roundApi.pack, SHOW_REQUEST: roundApi.requestShow, SIDE_SHOW_REQUEST: roundApi.requestSideShow, SEE: roundApi.seeCards };
@@ -90,7 +101,6 @@ export default function GameBoard() {
       if (p.status === 'ACTIVE') { previous = p; break; }
     }
   }
-  const other = active.find(p => idOf(p.userId) !== myId);
   const legacy = round?.status === 'SHOW_PENDING' || (round?.status === 'SIDE_SHOW_PENDING' && round.sideShowRequest?.result === 'ACCEPTED');
   const request = round?.sideShowRequest;
   const target = idOf(request?.targetPlayer) === myId;
@@ -113,7 +123,7 @@ export default function GameBoard() {
       <div className="table-toolbar"><span className={`connection-status ${connected ? 'is-connected' : ''}`} title={connected ? 'Connected to the live table' : 'Reconnecting; the table refreshes automatically'}>{connected ? <Wifi size={16} /> : <WifiOff size={16} />}<span>{connected ? 'Live' : 'Reconnecting'}</span></span><button className="table-icon-button" onClick={() => setRules(!rules)} aria-expanded={rules} aria-label="Table rules"><BookOpen size={20} /></button><Link className="table-icon-button" to={`/games/${gameId}/history`} aria-label="Game history"><History size={20} /></Link></div>
     </header>
     {error && <div className="table-error table-error-banner" role="alert">{error}<button onClick={fetchGameState}>Retry</button></div>}
-    {rules && <section className="table-rules"><h2>Table rules</h2><p>Three cards each. Trail beats pure sequence, sequence, colour, pair, then high card. Sequences rank AKQ, A23, KQJ, down to 234. Suits have equal value.</p><p>Blind pays the stake; seen pays twice the stake. A raise doubles the blind stake, up to ₹{game.bootAmount * game.maxBetMultiplier}. With two players left, a blind player may show either opponent; a seen player may only show another seen player. The requester loses a tie.</p><p>The pot limit is 100× boot (₹{(game.bootAmount * 100).toLocaleString('en-IN')}). The last payment is capped to the remaining amount. At the limit, all active hands are revealed and compared, with no extra fee. Equal best hands split the pot; spare rupees go in table seat order.</p><p>Side show compares with the previous active player. Both must be seen, with at least three players left. If accepted, the lower hand packs; the requester packs on a tie. Folded cards stay private.</p>{game.mode === 'JOKER' && <p>One indicator is drawn before the deal. Every card matching its rank is wild and takes the best possible value. The indicator is kept out of all hands.</p>}<button className="table-button" onClick={() => setRules(false)}>Close rules</button></section>}
+    {rules && <section className="table-rules"><h2>Table rules</h2><p>Three cards each. Trail beats pure sequence, sequence, colour, pair, then high card. Sequences rank AKQ, A23, KQJ, down to 234. Suits have equal value.</p><p>Blind pays the stake; seen pays twice the stake. A raise doubles the blind stake, up to ₹{game.bootAmount * game.maxBetMultiplier}. With two players left, either player can force a show on their turn, even against a blind opponent. No acceptance is needed. The requester loses a tie.</p><p>The pot limit is 100× boot (₹{(game.bootAmount * 100).toLocaleString('en-IN')}). The last payment is capped to the remaining amount. At the limit, all active hands are revealed and compared, with no extra fee. Equal best hands split the pot; spare rupees go in table seat order.</p><p>Side show compares with the previous active player. Both must be seen, with at least three players left. If accepted, the lower hand packs; the requester packs on a tie. Folded cards stay private.</p>{game.mode === 'JOKER' && <p>One indicator is drawn before the deal. Every card matching its rank is wild and takes the best possible value. The indicator is kept out of all hands.</p>}<button className="table-button" onClick={() => setRules(false)}>Close rules</button></section>}
     <section className="table-stage" aria-label="Teen Patti table">
       <div className="table-felt"><span className="felt-brand" aria-hidden="true">TEEN PATTI<span>COMPANION</span></span></div>
       <div className="table-center"><PotArea potAmount={round?.potAmount} currentBet={round?.currentBet || game.bootAmount} potLimit={potLimit} />
@@ -130,7 +140,7 @@ export default function GameBoard() {
       {round?.status === 'SIDE_SHOW_PENDING' && !legacy && <div className="round-message"><h2>Side show requested</h2><p>{target ? `${requester?.userId?.name || 'A player'} wants to compare hands with you.` : 'Waiting for the previous player to accept or decline.'}</p>{target && <div className="response-controls"><button className="table-button button-gold" disabled={processing} onClick={() => perform(() => roundApi.respondSideShow(round._id, true))}>Accept & compare</button><button className="table-button" disabled={processing} onClick={() => perform(() => roundApi.respondSideShow(round._id, false))}>Decline</button></div>}</div>}
       {legacy && <div className="round-message"><h2>Physical-card round</h2><p>This round started before digital dealing. Compare your physical cards to finish it.</p>{round.status === 'SHOW_PENDING' && host && active.map(p => <button className="table-button" key={idOf(p.userId)} disabled={processing} onClick={() => perform(() => roundApi.submitShowResult(round._id, idOf(p.userId)))}>{p.userId.name} wins</button>)}{round.status === 'SIDE_SHOW_PENDING' && [idOf(request.requestedBy), idOf(request.targetPlayer)].includes(myId) && round.players.filter(p => [idOf(request.requestedBy), idOf(request.targetPlayer)].includes(idOf(p.userId))).map(p => <button className="table-button" key={idOf(p.userId)} disabled={processing} onClick={() => perform(() => roundApi.submitSideShowResult(round._id, idOf(p.userId)))}>{p.userId.name} packs</button>)}</div>}
       {round && !complete && <div className="my-hand-area"><div className="hand-caption"><span>Your hand</span><strong>{me?.status === 'PACKED' ? 'Packed' : me?.handRank || 'Playing blind'}</strong>{wallet !== undefined && <small>Available · ₹{wallet.toLocaleString('en-IN')}</small>}</div><CardHand cards={me?.cards} jokerRank={round.jokerCard?.rank} />{me?.status === 'ACTIVE' && !me.seenCards && <button className="table-button see-cards" disabled={processing || round.status !== 'ACTIVE'} onClick={() => handleAction('SEE')}><Eye size={18} /> See cards</button>}</div>}
-      {round?.status === 'ACTIVE' && me?.status === 'ACTIVE' && <ActionPanel isMyTurn={myTurn} isProcessing={processing} currentBet={round.currentBet} maxBetLimit={round.startingBet * game.maxBetMultiplier} potRemaining={potLimit ? Math.max(0, potLimit - round.potAmount) : undefined} activePlayersCount={active.length} onAction={handleAction} currentPlayerName={current?.userId?.name} seenCards={me.seenCards} canSideShow={me.seenCards && previous?.seenCards} canShow={!me.seenCards || other?.seenCards} balance={wallet} />}
+      {round?.status === 'ACTIVE' && me?.status === 'ACTIVE' && <ActionPanel isMyTurn={myTurn} isProcessing={processing} currentBet={round.currentBet} maxBetLimit={round.startingBet * game.maxBetMultiplier} potRemaining={potLimit ? Math.max(0, potLimit - round.potAmount) : undefined} activePlayersCount={active.length} onAction={handleAction} currentPlayerName={current?.userId?.name} seenCards={me.seenCards} canSideShow={me.seenCards && previous?.seenCards} balance={wallet} />}
       {round?.status === 'ACTIVE' && me?.status === 'PACKED' && <p className="spectator-message">You packed. Watch this round and join the next deal.</p>}
       {round?.sideShowRequest && ['TARGET_WON', 'REQUESTER_WON', 'DECLINED'].includes(round.sideShowRequest.result) && round.status === 'ACTIVE' && <p className="spectator-message" role="status">{round.sideShowRequest.result === 'DECLINED' ? 'Side show declined. Play continues.' : 'Side show resolved. The lower hand packed; other hands remain private.'}</p>}
     </section>

@@ -60,4 +60,20 @@ describe('Private round views', () => {
     expect(roundForViewer(round,'spectator').players[0].cards).toHaveLength(3);
     expect(roundForViewer(round,'spectator').players[1].cards).toBeUndefined();
   });
+  test('plain database results retain serializable IDs and redact cards without mutating the source', () => {
+    const { Types } = require('mongoose');
+    const roundId = new Types.ObjectId(), viewerId = new Types.ObjectId();
+    const raw = { _id: roundId, status: 'ACTIVE', players: [
+      { userId: { _id: viewerId }, seenCards: true, cards: hand('14S','13H','12D') },
+      { userId: new Types.ObjectId(), seenCards: false, cards: hand('3S','5H','8D') },
+    ] };
+    const view = roundForViewer(raw, viewerId);
+    const response = JSON.parse(JSON.stringify(view));
+    expect(response._id).toBe(String(roundId));
+    expect(response.players[0].userId._id).toBe(String(viewerId));
+    expect(response.players[0].handRank).toBe('Sequence');
+    expect(response.players[1].cards).toBeUndefined();
+    expect(raw.players[1].cards).toHaveLength(3);
+    expect(raw.players[0].handRank).toBeUndefined();
+  });
 });
