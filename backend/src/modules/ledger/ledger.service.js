@@ -27,6 +27,18 @@ const recordTransaction = async (session, { userId, gameId, roundId, type, amoun
   return transaction;
 };
 
+// A deal charges every seat together, within the same round transaction.
+const recordTransactions = async (session, entries) => {
+  const options = { session };
+  await Transaction.insertMany(entries, options);
+  await Game.bulkWrite(entries.filter(entry => entry.gameId).map(({ userId, gameId, amount }) => ({
+    updateOne: {
+      filter: { _id: gameId, 'participants.userId': userId },
+      update: { $inc: { 'participants.$.balance': amount } },
+    },
+  })), options);
+};
+
 const getGameTransactions = async (gameId) => {
   return await Transaction.find({ gameId })
     .populate('userId', 'name username')
@@ -56,6 +68,7 @@ const getGameSummary = async (gameId) => {
 
 module.exports = {
   recordTransaction,
+  recordTransactions,
   getGameTransactions,
   getGameSummary
 };

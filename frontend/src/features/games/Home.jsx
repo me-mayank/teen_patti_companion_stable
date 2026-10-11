@@ -5,6 +5,7 @@ import * as gamesApi from './games.api';
 import * as invitationsApi from '../invitations/invitations.api';
 import { Plus, Play, History, Bell, Loader2, Check, X, UserCircle, Info, Download } from 'lucide-react';
 import logo from '../../assets/logo.png';
+import { createRefreshScheduler } from '../../shared/hooks/refreshScheduler';
 
 const Home = () => {
   const { user } = useAuth();
@@ -70,9 +71,9 @@ const Home = () => {
   };
 
   useEffect(() => {
-    loadData();
-    const timer = setInterval(loadData, 10000);
-    return () => clearInterval(timer);
+    if (!document.hidden) loadData();
+    const polling = createRefreshScheduler({ refresh: loadData });
+    return () => polling.dispose();
   }, []);
 
   const handleInviteResponse = async (invitationId, status) => {

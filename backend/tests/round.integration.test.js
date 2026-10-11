@@ -64,6 +64,116 @@ test('deal stores unique cards, takes boot exactly once, keeps blind hands off H
   expect((await post(`/games/${game._id}/rounds`)).status).toBe(400);
 });
 
+test.each([2, 6])('dealing to %i players groups wallet checks and boot writes', async count => {
+  const extra = count > players.length ? await User.create(Array.from({ length: count - players.length }, (_, i) => ({
+    name: `Extra ${i}`, email: `boot-extra${i}@example.test`, username: `boot-extra${i}`, passwordHash: 'test-only', globalBalance: 1000,
+  }))) : [];
+  const seated = [...players, ...extra].slice(0, count);
+  await Game.updateOne({ _id: game._id }, { $set: {
+    participants: seated.map(user => ({ userId: user._id, balance: 0 })), turnOrder: seated.map(user => user._id),
+  } });
+  const calls = [], previousDebug = mongoose.get('debug');
+  mongoose.set('debug', (collection, method) => calls.push({ collection, method }));
+  let round;
+  try {
+    round = await deal();
+    const writes = calls.filter(call => call.collection === 'users' && ['updateOne', 'updateMany', 'bulkWrite'].includes(call.method));
+    const ledgerWrites = calls.filter(call => call.collection === 'transactions' && ['insertOne', 'insertMany'].includes(call.method));
+    const balanceReads = calls.filter(call => call.collection === 'games' && call.method === 'find');
+    expect(writes).toHaveLength(1);
+    expect(ledgerWrites).toHaveLength(1);
+    expect(balanceReads).toHaveLength(1); // The response reuses the grouped boot check.
+  } finally { mongoose.set('debug', previousDebug); }
+  expect(round.potAmount).toBe(count * 10);
+  expect(round.players.every(player => player.totalContribution === 10)).toBe(true);
+  expect(await Transaction.countDocuments({ roundId: round._id, type: 'BOOT' })).toBe(count);
+  const storedGame = await Game.findById(game._id);
+  expect(storedGame.participants.map(player => player.balance)).toEqual(Array(count).fill(-10));
+});
+
+test('full game refresh uses its authorized game without a second game read', async () => {
+  const calls = [], previousDebug = mongoose.get('debug');
+  mongoose.set('debug', (collection, method) => { if (collection === 'games' && method === 'findOne') calls.push(method); });
+  try {
+    const response = await get(`/games/${game._id}`);
+    expect(response.status).toBe(200);
+    expect(response.body.createdBy.name).toBe('Player 1');
+    expect(response.body.participants[1].userId.name).toBe('Player 2');
+    expect(response.body.turnOrder[2].name).toBe('Player 3');
+    expect(calls).toHaveLength(1);
+  } finally { mongoose.set('debug', previousDebug); }
+});
+
+test('a turn response reuses its checked wallet balance and includes a show payout', async () => {
+  const round = await deal();
+  const calls = [], previousDebug = mongoose.get('debug');
+  mongoose.set('debug', (collection, method) => { if (collection === 'games' && method === 'find') calls.push(method); });
+  try {
+    const bet = await post(`/rounds/${round._id}/bet`);
+    expect(bet.status).toBe(200);
+    expect(bet.body.availableBalance).toBe(980);
+    expect(calls).toHaveLength(1);
+  } finally { mongoose.set('debug', previousDebug); }
+  await post(`/rounds/${round._id}/pack`, 1);
+  await forceHands(round, [cards('14S', '14H', '14D'), cards('2S', '5H', '8D'), cards('3S', '6H', '9D')]);
+  await post(`/rounds/${round._id}/bet`, 2);
+  const show = await post(`/rounds/${round._id}/show/request`);
+  expect(show.status).toBe(200);
+  expect(show.body.winnerId._id).toBe(String(players[0]._id));
+  expect(show.body.availableBalance).toBe(1030); // 1000 - boot - bet - fee + 60 pot.
+  expect((await get(`/rounds/${round._id}`)).body.availableBalance).toBe(1030);
+});
+
+test('round revisions increase only after committed actions and sockets expose only the marker', async () => {
+  const round = await deal();
+  expect(round.revision).toBe(1);
+  const seen = await post(`/rounds/${round._id}/see-cards`);
+  expect(seen.body.revision).toBe(2);
+  const bet = await post(`/rounds/${round._id}/bet`);
+  expect(bet.body.revision).toBe(3);
+  const notifications = emit.mock.calls.map(([, payload]) => payload);
+  expect(notifications.map(payload => payload.revision)).toEqual([1, 2, 3]);
+  expect(notifications[2]).toEqual({ gameId: String(game._id), roundId: round._id, roundNumber: 1, revision: 3 });
+  expect((await post(`/rounds/${round._id}/bet`)).status).toBe(403);
+  expect((await stored(round)).revision).toBe(3);
+  expect(emit.mock.calls).toHaveLength(3);
+});
+
+test.each(['bet', 'bet-twice'])('%s marks Chaal only after a seen player pays', async action => {
+  const round = await deal();
+  expect(round.players[0].lastBet).toBeUndefined();
+  const seen = await post(`/rounds/${round._id}/see-cards`, 0);
+  expect(seen.body.players[0].seenCards).toBe(true);
+  expect(seen.body.players[0].lastBet).toBeUndefined();
+  expect((await post(`/rounds/${round._id}/${action}`, 1)).status).toBe(403);
+  const result = await post(`/rounds/${round._id}/${action}`, 0);
+  expect(result.status).toBe(200);
+  expect(result.body.players[0].lastBet).toBe('CHAAL');
+  expect(result.body.players[0].status).toBe('ACTIVE');
+  expect(result.body.players[0].totalContribution).toBe(action === 'bet' ? 30 : 50);
+  expect(result.body.currentTurnIndex).toBe(1);
+  const blind = await post(`/rounds/${round._id}/bet`, 1);
+  expect(blind.body.players[1].lastBet).toBe('BLIND');
+  expect(blind.body.players[1].seenCards).toBe(false);
+  expect((await get(`/rounds/${round._id}`, 2)).body.players[0].lastBet).toBe('CHAAL');
+  expect((await get(`/rounds/${round._id}`, 2)).body.players[0].cards).toBeUndefined();
+});
+
+test('concurrent deals at different tables cannot spend the same shared wallets twice', async () => {
+  await User.updateMany({ _id: { $in: players.slice(0, 3).map(player => player._id) } }, { $set: { globalBalance: 10 } });
+  const other = await Game.create({ name: 'Second table', createdBy: players[0]._id, bootAmount: 10, status: 'ACTIVE',
+    participants: players.slice(0, 3).map(player => ({ userId: player._id })), turnOrder: players.slice(0, 3).map(player => player._id),
+  });
+  const responses = await Promise.all([post(`/games/${game._id}/rounds`), post(`/games/${other._id}/rounds`)]);
+  expect(responses.map(response => response.status).sort()).toEqual([201, 400]);
+  expect(await Round.countDocuments({})).toBe(1);
+  expect(await Transaction.countDocuments({ type: 'BOOT' })).toBe(3);
+  const tables = await Game.find({});
+  for (const player of players.slice(0, 3)) {
+    expect(tables.reduce((sum, table) => sum + table.participants.find(seat => String(seat.userId) === String(player._id)).balance, 10)).toBe(0);
+  }
+});
+
 // Grow the pot through real payments, so boundary checks also exercise the ledger.
 async function nearPotLimit(round) {
   await Game.updateOne({ _id: game._id }, { $set: { maxBetMultiplier: 8 } });
@@ -187,6 +297,36 @@ test('seeing cards works off-turn, reveals only own cards and charges seen stake
   expect(bet.body.potAmount).toBe(60);
   expect(bet.body.players[1].totalContribution).toBe(30);
   expect(bet.body.availableBalance).toBe(970);
+});
+
+test('seeing cards uses an atomic round patch without starting a financial transaction', async () => {
+  const round = await deal();
+  const sessions = jest.spyOn(mongoose, 'startSession');
+  try {
+    const seen = await post(`/rounds/${round._id}/see-cards`, 1);
+    expect(seen.status).toBe(200);
+    expect(seen.body.players[1].cards).toHaveLength(3);
+    expect(seen.body.availableBalance).toBe(990);
+    expect(sessions).not.toHaveBeenCalled();
+    expect(seen.body.revision).toBe(2);
+    expect(await Transaction.countDocuments({ type: { $ne: 'BOOT' } })).toBe(0);
+  } finally { sessions.mockRestore(); }
+});
+
+test('simultaneous card reveals and bets preserve seen state, revision and stake', async () => {
+  const round = await deal();
+  const [seen, bet] = await Promise.all([post(`/rounds/${round._id}/see-cards`, 0), post(`/rounds/${round._id}/bet`, 0)]);
+  expect(seen.status).toBe(200); expect(bet.status).toBe(200);
+  const current = await stored(round);
+  expect(current.players[0].seenCards).toBe(true);
+  expect(current.revision).toBe(3);
+  expect(current.currentTurnIndex).toBe(1);
+  const fee = await Transaction.findOne({ roundId: round._id, type: 'BET' });
+  // Either valid serialization is allowed: blind before reveal or Chaal after it.
+  expect([-10, -20]).toContain(fee.amount);
+  expect(current.players[0].lastBet).toBe(fee.amount === -20 ? 'CHAAL' : 'BLIND');
+  expect(current.potAmount).toBe(30 - fee.amount);
+  expect(current.players[0].totalContribution).toBe(10 - fee.amount);
 });
 
 test('card reveal and table refresh avoid re-reading rounds and games already loaded', async () => {
@@ -423,7 +563,7 @@ test('socket connections authenticate players, reject unauthorized rooms and sen
     const update = new Promise(resolve=>member.once('round:update',resolve));
     await deal();
     const payload = await update;
-    expect(Object.keys(payload)).toEqual(['gameId']);
+    expect(Object.keys(payload)).toEqual(['gameId', 'roundId', 'roundNumber', 'revision']);
     expect(payload.gameId).toBe(String(game._id));
   } finally {
     sockets.forEach(socket=>socket.disconnect());

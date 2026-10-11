@@ -10,6 +10,7 @@ import PotArea from './components/PotArea';
 import ActionPanel from './components/ActionPanel';
 import PlayingCard, { CardHand, rankLabel } from './components/PlayingCard';
 import { createTableSync } from './tableSync';
+import { createRefreshScheduler } from '../../shared/hooks/refreshScheduler';
 import './table.css';
 
 const idOf = value => String(value?._id || value || '');
@@ -28,8 +29,10 @@ export default function GameBoard() {
   const [confirmEnd, setConfirmEnd] = useState(false);
   const busy = useRef(false);
   const tableSync = useRef(null);
+  const scheduler = useRef(null);
+  const live = useRef(false);
 
-  const fetchGameState = useCallback((roundOnly = false) => tableSync.current?.refresh(roundOnly === true), []);
+  const fetchGameState = useCallback((roundOnly = false, change) => tableSync.current?.refresh(roundOnly === true, change), []);
 
   useEffect(() => {
     const sync = createTableSync({
@@ -43,25 +46,35 @@ export default function GameBoard() {
       onLoaded: () => setLoading(false),
     });
     tableSync.current = sync;
+    const polling = createRefreshScheduler({ refresh: fetchGameState, isConnected: () => live.current, onVisibility: sync.setVisible });
+    scheduler.current = polling;
     busy.current = false; setProcessing(false);
     setLoading(true); setGame(null); setRound(null); fetchGameState();
-    const timer = setInterval(fetchGameState, 10000);
-    return () => { clearInterval(timer); sync.dispose(); };
+    return () => { polling.dispose(); sync.dispose(); };
   }, [gameId, fetchGameState]);
   useEffect(() => {
     if (!socket) return;
+    let active = true, attempt = 0;
+    const connection = value => { live.current = value; setConnected(value); scheduler.current?.reschedule(); };
     const join = () => {
-      setConnected(true);
-      socket.emit('joinGame', gameId, response => { if (!response?.ok) { setConnected(false); setError(response?.message || 'Could not join the table'); } else fetchGameState(); });
+      const request = ++attempt;
+      connection(false);
+      socket.emit('joinGame', gameId, response => {
+        if (!active || request !== attempt) return;
+        connection(Boolean(response?.ok));
+        if (!response?.ok) setError(response?.message || 'Could not join the table');
+        else fetchGameState();
+      });
     };
-    const disconnect = () => setConnected(false);
-    const updateRound = payload => { if (!payload?.gameId || idOf(payload.gameId) === gameId) fetchGameState(true); };
+    const disconnect = () => { attempt++; connection(false); };
+    const updateRound = payload => { if (!payload?.gameId || idOf(payload.gameId) === gameId) fetchGameState(true, payload); };
     const updateGame = payload => { if (!payload?.gameId || idOf(payload.gameId) === gameId) fetchGameState(); };
     socket.on('connect', join); socket.on('disconnect', disconnect); socket.on('connect_error', disconnect);
     for (const event of ['round:update', 'round:completed']) socket.on(event, updateRound);
     socket.on('game:update', updateGame);
     if (socket.connected) join();
     return () => {
+      active = false; live.current = false;
       socket.emit('leaveGame', gameId);
       socket.off('connect', join); socket.off('disconnect', disconnect); socket.off('connect_error', disconnect);
       for (const event of ['round:update', 'round:completed']) socket.off(event, updateRound);

@@ -11,6 +11,7 @@ const roundSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    revision: { type: Number, min: 0, default: 0 },
     status: {
       type: String,
       enum: ['CREATED', 'ACTIVE', 'SIDE_SHOW_PENDING', 'SHOW_PENDING', 'COMPLETED'],
@@ -42,6 +43,7 @@ const roundSchema = new mongoose.Schema(
         totalContribution: { type: Number, default: 0 },
         winAmount: { type: Number, default: 0 },
         seenCards: { type: Boolean, default: false },
+        lastBet: { type: String, enum: ['BLIND', 'CHAAL'] },
         revealed: { type: Boolean, default: false },
         cards: { type: [{ _id: false, rank: { type: Number, min: 2, max: 14 }, suit: { type: String, enum: ['S', 'H', 'D', 'C'] } }], select: false, default: undefined },
       },
