@@ -14,7 +14,8 @@ const playerPopulation = [
   { path: 'players.userId', select: publicPlayerFields },
   { path: 'winnerId', select: publicPlayerFields },
 ];
-const readRound = query => query.select('+players.cards').populate(playerPopulation).lean();
+const privateRoundFields = '+players.cards +players.sideShowViewers';
+const readRound = query => query.select(privateRoundFields).populate(playerPopulation).lean();
 
 // Notifications only invalidate state. Private hands are fetched through authenticated HTTP.
 function notify(round) {
@@ -138,7 +139,7 @@ async function mutate(roundId, userId, action) {
   let committedRound, committedGame;
   try {
     await session.withTransaction(async () => {
-      const round = await Round.findById(roundId).select('+players.cards').session(session);
+      const round = await Round.findById(roundId).select(privateRoundFields).session(session);
       if (!round) throw fail('Round not found', 404);
       const game = await Game.findById(round.gameId).session(session);
       await canAccessGame(game, userId);
@@ -221,7 +222,7 @@ const pack = (roundId, userId) => mutate(roundId, userId, async (session, round,
   else advance(round);
 });
 async function seeCards(roundId, userId) {
-  const round = await Round.findById(roundId).select('+players.cards').lean();
+  const round = await Round.findById(roundId).select(privateRoundFields).lean();
   if (!round) throw fail('Round not found', 404);
   const game = await requireGameAccess(round.gameId, userId);
   if (game.status !== 'ACTIVE' || round.status !== 'ACTIVE') throw fail('Cards cannot be opened in this state');
@@ -233,7 +234,7 @@ async function seeCards(roundId, userId) {
   // Bets write this same round and retry their transaction on a conflicting reveal.
   const updated = await Round.findOneAndUpdate({ _id: roundId, status: 'ACTIVE',
     players: { $elemMatch: { userId, status: 'ACTIVE', cards: { $size: 3 } } },
-  }, { $set: { 'players.$.seenCards': true }, $inc: { revision: 1 } }, { new: true }).select('+players.cards');
+  }, { $set: { 'players.$.seenCards': true }, $inc: { revision: 1 } }, { new: true }).select(privateRoundFields);
   if (!updated) throw fail('The round changed before your cards could be opened. Please retry.');
   notify(updated);
   return committedView(updated, game, userId);
@@ -259,6 +260,10 @@ const respondSideShow = (roundId, userId, accept) => mutate(roundId, userId, asy
       return;
     }
     const loser = compareHands(requester.cards, target.cards, round.jokerCard?.rank) > 0 ? target : requester;
+    // Keep each accepted comparison visible to its two participants for this
+    // round, even after packing or a later side show replaces the request.
+    requester.sideShowViewers = [...(requester.sideShowViewers || []), target.userId];
+    target.sideShowViewers = [...(target.sideShowViewers || []), requester.userId];
     loser.status = 'PACKED'; // Equal hands: the requesting player loses.
     request.result = loser === target ? 'REQUESTER_WON' : 'TARGET_WON';
   } else request.result = 'DECLINED';

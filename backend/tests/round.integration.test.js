@@ -431,11 +431,31 @@ test('accepted side show compares hands privately, charges once and packs the re
   const asked = await post(`/rounds/${round._id}/side-show/request`,0);
   expect(asked.body.potAmount).toBe(50);
   expect(asked.body.players[0].totalContribution).toBe(30);
+  expect(asked.body.players[2].cards).toBeUndefined();
+  expect((await get(`/rounds/${round._id}`, 2)).body.players[0].cards).toBeUndefined();
   expect((await post(`/rounds/${round._id}/bet`,0)).status).toBe(400);
   expect((await post(`/rounds/${round._id}/side-show/respond`,1,{accept:true})).status).toBe(403);
   const accepted = await post(`/rounds/${round._id}/side-show/respond`,2,{accept:true});
   expect(accepted.body.players[0].status).toBe('PACKED');
-  expect(accepted.body.players[0].cards).toBeUndefined();
+  expect(accepted.body.players[0].cards).toEqual(cards('14S','12H','9D'));
+  expect(accepted.body.players[0].handRank).toBe('High card');
+  expect(accepted.body.players[2].cards).toEqual(cards('14C','12D','9S'));
+  expect(accepted.body.players[1].cards).toBeUndefined();
+  for (const viewer of [0, 1, 2]) {
+    for (const path of [`/rounds/${round._id}`, `/games/${game._id}/rounds/current`]) {
+      const response = await get(path, viewer);
+      expect(response.status).toBe(200);
+      for (const [index, player] of response.body.players.entries()) {
+        if (viewer !== 1 && index !== 1) expect(player.cards).toHaveLength(3);
+        else { expect(player.cards).toBeUndefined(); expect(player.handRank).toBeUndefined(); }
+        expect(player.sideShowViewers).toBeUndefined();
+        expect(player.revealed).toBe(false);
+      }
+    }
+  }
+  expect((await get(`/rounds/${round._id}`, 3)).status).toBe(403);
+  expect(emit.mock.calls.every(([, payload]) => !payload.players && !payload.cards)).toBe(true);
+  expect(await Transaction.countDocuments({ roundId: round._id, type: 'SHOW_FEE' })).toBe(1);
   expect(accepted.body.currentTurnIndex).toBe(1);
   expect(accepted.body.status).toBe('ACTIVE');
   expect((await post(`/rounds/${round._id}/side-show/respond`,2,{accept:true})).status).toBe(400);
@@ -448,6 +468,68 @@ test('declined side show keeps the fee in the pot and advances play', async () =
   expect(result.body.currentTurnIndex).toBe(1);
   expect(result.body.potAmount).toBe(50);
   expect(result.body.players.every(p=>p.status==='ACTIVE')).toBe(true);
+  expect(result.body.players[0].cards).toBeUndefined();
+  expect((await get(`/rounds/${round._id}`, 0)).body.players[2].cards).toBeUndefined();
+});
+
+test.each(['CLASSIC', 'JOKER'])('accepted side show shares both hands when the requester wins in %s', async mode => {
+  await Game.updateOne({ _id: game._id }, { $set: { mode } });
+  const round = await deal();
+  if (mode === 'JOKER') await Round.updateOne({ _id: round._id }, { $set: { jokerCard: { rank: 9, suit: 'C' } } });
+  const hand = mode === 'JOKER' ? cards('9S','14H','14D') : cards('14S','14H','14D');
+  await forceHands(round, [hand, cards('2S','5H','8D'), cards('13S','13H','13D')]);
+  await post(`/rounds/${round._id}/see-cards`, 0);
+  await post(`/rounds/${round._id}/see-cards`, 2);
+  await post(`/rounds/${round._id}/side-show/request`, 0);
+  const accepted = await post(`/rounds/${round._id}/side-show/respond`, 2, { accept: true });
+  expect(accepted.status).toBe(200);
+  expect(accepted.body.sideShowRequest.result).toBe('REQUESTER_WON');
+  expect(accepted.body.players[2].status).toBe('PACKED');
+  expect(accepted.body.players[0].cards).toEqual(hand);
+  expect(accepted.body.players[0].handRank).toBe('Trail');
+  const requester = await get(`/rounds/${round._id}`, 0);
+  expect(requester.body.players[2].cards).toEqual(cards('13S','13H','13D'));
+  const bystander = await post(`/rounds/${round._id}/see-cards`, 1);
+  expect(bystander.body.players[1].cards).toHaveLength(3);
+  expect(bystander.body.players[0].cards).toBeUndefined();
+  expect(bystander.body.players[2].cards).toBeUndefined();
+});
+
+test('side show access survives later comparisons and completion, then resets on the next deal', async () => {
+  await Game.updateOne({ _id: game._id }, { $set: {
+    participants: players.map(user => ({ userId: user._id })), turnOrder: players.map(user => user._id),
+  } });
+  const round = await deal();
+  await forceHands(round, [cards('2S','5H','8D'), cards('3S','6H','10D'), cards('4S','7H','11D'), cards('14S','14H','14D')]);
+  await post(`/rounds/${round._id}/see-cards`, 0);
+  await post(`/rounds/${round._id}/see-cards`, 3);
+  await post(`/rounds/${round._id}/side-show/request`, 0);
+  expect((await post(`/rounds/${round._id}/side-show/respond`, 3, { accept: true })).status).toBe(200);
+  await post(`/rounds/${round._id}/see-cards`, 1);
+  await post(`/rounds/${round._id}/side-show/request`, 1);
+  const pending = await get(`/rounds/${round._id}`, 0);
+  expect(pending.body.players[3].cards).toHaveLength(3);
+  expect(pending.body.players[1].cards).toBeUndefined();
+  expect((await post(`/rounds/${round._id}/side-show/respond`, 3, { accept: true })).status).toBe(200);
+  const visibleHands = [[0, 3], [1, 3], [], [0, 1, 3]];
+  for (const viewer of [0, 1, 2, 3]) {
+    const response = await get(`/games/${game._id}/rounds/current`, viewer);
+    expect(response.status).toBe(200);
+    response.body.players.forEach((player, index) => {
+      expect(Boolean(player.cards)).toBe(visibleHands[viewer].includes(index));
+      expect(player.sideShowViewers).toBeUndefined();
+    });
+  }
+  const completed = await post(`/rounds/${round._id}/pack`, 2);
+  expect(completed.body.completionReason).toBe('LAST_PLAYER');
+  expect(completed.body.players.every(player => !player.cards)).toBe(true);
+  const earlierLoser = await get(`/rounds/${round._id}`, 0);
+  expect(earlierLoser.body.players[3].cards).toHaveLength(3);
+  expect(earlierLoser.body.players[1].cards).toBeUndefined();
+  const next = await deal();
+  expect(next.players.every(player => !player.cards && !player.sideShowViewers)).toBe(true);
+  const target = await get(`/rounds/${next._id}`, 3);
+  expect(target.body.players.every(player => !player.cards)).toBe(true);
 });
 test('joker indicator is public, excluded from hands, and wild rank changes the winner', async () => {
   await Game.updateOne({_id:game._id},{$set:{mode:'JOKER'}});

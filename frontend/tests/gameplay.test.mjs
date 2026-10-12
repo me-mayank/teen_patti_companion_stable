@@ -81,6 +81,7 @@ function board() {
     './round.api': Object.fromEntries(['bet', 'betTwice', 'pack', 'requestShow', 'requestSideShow', 'seeCards', 'startRound', 'respondSideShow'].map(name => [name, () => { calls.push(name); return action(); }])),
     'lucide-react': Object.fromEntries(['Loader2', 'Crown', 'ArrowLeft', 'BookOpen', 'History', 'Wifi', 'WifiOff', 'Eye'].map(name => [name, name])),
     './components/PlayerCircle': 'PlayerCircle', './components/PotArea': 'PotArea', './components/ActionPanel': 'ActionPanel',
+    './components/Dealer': 'Dealer',
     './components/PlayingCard': { __esModule: true, default: 'PlayingCard', CardHand: 'CardHand', rankLabel: String },
     './table.css': {},
     './tableSync': { createTableSync },
@@ -99,15 +100,11 @@ function board() {
     pending.forEach(effect => effect());
     return tree;
   }
-  function find(type, node) {
-    if (!node || typeof node !== 'object') return;
-    if (node.type === type) return node;
-    for (const child of [node.props?.children].flat(Infinity)) {
-      const found = find(type, child);
-      if (found) return found;
-    }
+  function findAll(type, node) {
+    if (!node || typeof node !== 'object') return [];
+    return [...(node.type === type ? [node] : []), ...[node.props?.children].flat(Infinity).flatMap(child => findAll(type, child))];
   }
-  return { render, find: type => find(type, tree), calls, getters, socket, emit: (event, payload = { gameId: 'table' }) => listeners.get(event)?.(payload),
+  return { render, find: type => findAll(type, tree)[0], findAll: type => findAll(type, tree), calls, getters, socket, emit: (event, payload = { gameId: 'table' }) => listeners.get(event)?.(payload),
     setAction(fn) { action = fn; }, cleanup() { cleanups.forEach(fn => fn?.()); } };
 }
 
@@ -136,6 +133,49 @@ test('See cards, bets and Show update from the action response without waiting f
     }
     table.cleanup();
   }
+});
+
+test('accepted side shows display the compared hand for both participants, including the packed player', async () => {
+  const own = [{ rank: 14, suit: 'S' }, { rank: 12, suit: 'H' }, { rank: 9, suit: 'D' }];
+  const other = [{ rank: 14, suit: 'C' }, { rank: 12, suit: 'D' }, { rank: 9, suit: 'S' }];
+  for (const role of ['requester', 'target', 'bystander']) {
+    const table = board();
+    const result = { ...initialRound, currentTurnIndex: 1, sideShowRequest: {
+      requestedBy: role === 'requester' ? 'me' : 'other', targetPlayer: role === 'target' ? 'me' : 'target', result: 'TARGET_WON',
+    }, players: [
+      { userId: { _id: 'me', name: 'Me' }, status: role === 'requester' ? 'PACKED' : 'ACTIVE', seenCards: true, cards: own, handRank: 'High card' },
+      { userId: { _id: 'other', name: 'Opponent' }, status: role === 'target' ? 'PACKED' : 'ACTIVE', seenCards: true,
+        ...(role !== 'bystander' ? { cards: other, handRank: 'High card' } : {}) },
+      { userId: { _id: 'target', name: 'Third player' }, status: 'ACTIVE', seenCards: false },
+    ] };
+    table.getters.round = () => Promise.resolve(initialRound);
+    table.render(); await tick(); table.render();
+    table.getters.round = () => Promise.resolve(result);
+    table.emit('round:update'); await tick(); table.render();
+    const hands = table.findAll('CardHand');
+    assert.equal(hands.length, role === 'bystander' ? 1 : 2);
+    assert.deepEqual(hands[0].props.cards, own);
+    if (role !== 'bystander') assert.deepEqual(hands[1].props.cards, other);
+    const seats = table.findAll('PlayerCircle');
+    assert.equal(Boolean(seats.find(seat => seat.props.player.userId._id === 'other').props.player.cards), role !== 'bystander');
+    assert.equal(seats.find(seat => seat.props.player.userId._id === 'target').props.player.cards, undefined);
+    table.cleanup();
+  }
+});
+
+test('a completed show retains the viewer\'s full-size hand and the server-revealed opponent cards', async () => {
+  const table = board();
+  const own = [{ rank: 10, suit: 'C' }, { rank: 6, suit: 'S' }, { rank: 11, suit: 'S' }];
+  const other = [{ rank: 3, suit: 'S' }, { rank: 10, suit: 'H' }, { rank: 12, suit: 'S' }];
+  const result = { ...initialRound, status: 'COMPLETED', completionReason: 'SHOW', winnerId: { _id: 'other', name: 'Opponent' },
+    players: [{ ...initialRound.players[0], cards: own, revealed: true, seenCards: true, handRank: 'High card' },
+      { ...initialRound.players[1], status: 'WINNER', cards: other, revealed: true, handRank: 'High card' }] };
+  table.getters.round = () => Promise.resolve(result);
+  table.render(); await tick(); table.render();
+  assert.deepEqual(table.find('CardHand').props.cards, own);
+  assert.deepEqual(table.findAll('PlayerCircle')[1].props.player.cards, other);
+  assert.equal(table.find('ActionPanel'), undefined);
+  table.cleanup();
 });
 
 test('socket bursts refresh only the round and combine duplicate notifications', async () => {
