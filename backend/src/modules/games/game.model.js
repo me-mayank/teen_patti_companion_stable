@@ -32,7 +32,7 @@ const gameSchema = new mongoose.Schema(
     },
     maxBetMultiplier: {
       type: Number,
-      default: 5,
+      default: 16,
     },
     participants: [
       {

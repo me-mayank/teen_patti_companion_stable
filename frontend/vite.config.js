@@ -9,6 +9,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: { maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, globPatterns: ['**/*.{js,css,html,png,svg}'] },
       includeAssets: ['favicon.png', 'favicon.svg'],
       manifest: {
         name: 'Teen Patti Companion',

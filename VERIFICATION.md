@@ -1,13 +1,14 @@
-# Verification — card dealing and joker mode
+# Verification — compact table and gameplay fixes
 
-- Backend: **49 tests passed** in three suites, including exhaustive ranking of the 22,100 standard hands and temporary-database integration tests.
-- Pot cap: real-payment integration cases verify 100× boot, exact and capped final contributions, blind/seen/raise/show/side-show paths, joker comparisons, packed-hand privacy, concurrent completion, whole-rupee tie splits, next-round reset and older digital-round fallback.
-- Frontend: production build completed; lint completed with warnings (React effect and fast-refresh advisories). No lint errors.
-- Dependency scan: frontend has zero reported vulnerabilities; backend production dependencies have zero. The test-only Jest coverage dependency tree retains moderate advisories; no forced major downgrade was applied.
-- Browser: actual six-player Classic and Joker tables tested through the local demo API. Verified dealing, seeing cards off-turn, seen betting, turn advancement, automatic showdown/payout, next-round dealing, and authenticated live updates.
-- Pot-cap browser check: six-player Joker round at ₹920; a seen player paid the remaining ₹80 instead of the ₹160 stake. The pot finished at ₹1,000 and all active hands were shown automatically. Desktop and 390px mobile limit/payment displays were inspected; mobile document width remained 390px.
-- Demo showdown: ₹90 pot, two public showdown hands, all other hands private, zero-sum ledger confirmed. Demo money and accounts are synthetic.
-- Responsive evidence: 1440×960 desktop and 390×844 mobile captures have no horizontal document overflow. The mobile joker-card sizing and contrast defects found during inspection were corrected.
-- Fresh finish review: table composition, private hand, joker indicator, and action row matched the documented direction. Reviewer requested a turn-label correction; the follow-up review scored that correction resolved and returned `ship` at that fix's scope.
+Verified on 12 October 2026 on `codex/compact-table-gameplay-fixes`.
 
-Screenshots are local review evidence under `.impeccable/review/`. The local demo uses a disposable MongoDB replica set. Production deployment and an existing hosted database were not exercised; configuring a transaction-capable MongoDB connection and server secrets is required for deployment.
+- Backend: **70 tests passed** across three suites. Includes all 22,100 natural hands, per-seat printed joker dealing and evaluation, legacy rank-joker compatibility, card privacy, accepted side-show sharing, payments, payouts, pot caps and concurrent requests.
+- Revised Show fee: blind and seen requesters both pay twice the current chaal. Tests cover raised stakes, capped payments, ties and rollback when funds are insufficient.
+- Player actions: tests verify Seen/Blind/Chaal transitions and the actual last payment for normal and raised bets. Frontend checks preserve last-action labels during the player's turn.
+- Frontend: **25 tests passed**, including private comparison display for either participant, packed-player access, closing/reopening comparisons, bystander privacy, completed Show hands, fees, balance checks, card artwork and round synchronization.
+- Production build passed. The PWA caches 37 entries, including the supplied deck images. Lint passed with existing React effect and fast-refresh warnings; no errors.
+- Browser: tested disposable six-player Classic and Joker tables, a private side-show popup, printed joker cards, visible last Blind/Chaal amounts, and a completed two-player Show with a large winner/amount announcement. The completed-round DOM contains 48 confetti particles and CSS disables them for reduced motion.
+- Responsive checks: 1280×720 desktop, 390×844 portrait, 320×568 small portrait and 844×390 landscape. Document dimensions match each viewport. Seat, hand and action regions remain in bounds. Final short-landscape pot and hand regions have a visible gap.
+- Design detector reported no deterministic issues; `git diff --check` passed.
+
+All browser accounts, balances and rounds used the disposable local demo. The source Bicycle references are retained exactly; the back is reconstructed from the unobscured half because the ace covers part of it. Source details are in `frontend/src/assets/licenses/cards.md`.
