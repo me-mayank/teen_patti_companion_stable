@@ -9,7 +9,9 @@ import PlayerCircle from './components/PlayerCircle';
 import PotArea from './components/PotArea';
 import ActionPanel from './components/ActionPanel';
 import Dealer from './components/Dealer';
-import PlayingCard, { CardHand, rankLabel } from './components/PlayingCard';
+import { CardHand, CardArtworkPreload, rankLabel } from './components/PlayingCard';
+import TableDialog from './components/TableDialog';
+import WinCelebration from './components/WinCelebration';
 import { createTableSync } from './tableSync';
 import { createRefreshScheduler } from '../../shared/hooks/refreshScheduler';
 import './table.css';
@@ -22,7 +24,7 @@ const seatPositions = {
   3: [[50, 86], [14, 44], [86, 44]],
   4: [[50, 86], [14, 60], [26, 12], [86, 50]],
   5: [[50, 86], [13, 60], [25, 12], [75, 12], [87, 60]],
-  6: [[50, 86], [22, 88], [12, 49], [26, 10], [74, 10], [87, 68]],
+  6: [[50, 86], [15, 72], [12, 30], [28, 4], [74, 4], [87, 66]],
 };
 export default function GameBoard() {
   const { id: gameId } = useParams();
@@ -37,6 +39,7 @@ export default function GameBoard() {
   const [connected, setConnected] = useState(false);
   const [rules, setRules] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [dismissedComparison, setDismissedComparison] = useState(null);
   const busy = useRef(false);
   const tableSync = useRef(null);
   const scheduler = useRef(null);
@@ -130,6 +133,10 @@ export default function GameBoard() {
   const requester = round?.players.find(p => idOf(p.userId) === idOf(request?.requestedBy));
   const complete = round?.status === 'COMPLETED';
   const sideShowHands = round?.players.filter(p => idOf(p.userId) !== myId && p.cards?.length === 3 && !p.revealed) || [];
+  const comparison = { roundId: round?._id, playerIds: sideShowHands.map(p => idOf(p.userId)) };
+  // Publicly revealed hands leaving this list must not reopen an old dialog.
+  const comparisonOpen = sideShowHands.length > 0 && (dismissedComparison?.roundId !== comparison.roundId
+    || comparison.playerIds.some(id => !dismissedComparison.playerIds.includes(id)));
   const wallet = round?.availableBalance;
   const winners = round?.players.filter(p => p.status === 'WINNER') || [];
   const splitPot = winners.length > 1;
@@ -141,6 +148,7 @@ export default function GameBoard() {
   if (game.status !== 'ACTIVE') return <main className="table-screen table-loading"><h1>The table is being prepared</h1><p>Invite your players and set the turn order before dealing.</p><Link className="table-button button-gold" to={`/games/${gameId}/${game.status === 'TURN_ORDER_SETUP' ? 'turn-order' : 'lobby'}`}>Continue setup</Link></main>;
 
   return <main className="table-screen">
+    <CardArtworkPreload />
     <header className="table-header">
       <Link className="table-back" to="/" aria-label="Leave table"><ArrowLeft size={20} /></Link>
       <div className="table-summary">
@@ -154,35 +162,37 @@ export default function GameBoard() {
       <div className="table-toolbar"><span className={`connection-status ${connected ? 'is-connected' : ''}`} title={connected ? 'Connected to the live table' : 'Reconnecting; the table refreshes automatically'}>{connected ? <Wifi size={16} /> : <WifiOff size={16} />}<span>{connected ? 'Live' : 'Reconnecting'}</span></span><button className="table-icon-button" onClick={() => setRules(!rules)} aria-expanded={rules} aria-label="Table rules"><BookOpen size={20} /></button><Link className="table-icon-button" to={`/games/${gameId}/history`} aria-label="Game history"><History size={20} /></Link></div>
     </header>
     {error && <div className="table-error table-error-banner" role="alert">{error}<button onClick={fetchGameState}>Retry</button></div>}
-    {rules && <section className="table-rules"><h2>Table rules</h2><p>Three cards each. Trail beats pure sequence, sequence, colour, pair, then high card. Sequences rank AKQ, A23, KQJ, down to 234. Suits have equal value.</p><p>Blind pays the stake; seen pays twice the stake. A raise doubles the blind stake, up to ₹{game.bootAmount * game.maxBetMultiplier}. With two players left, either player can force a show on their turn, even against a blind opponent. No acceptance is needed. The requester loses a tie.</p><p>The pot limit is 100× boot (₹{(game.bootAmount * 100).toLocaleString('en-IN')}). The last payment is capped to the remaining amount. At the limit, all active hands are revealed and compared, with no extra fee. Equal best hands split the pot; spare rupees go in table seat order.</p><p>Side show compares with the previous active player. Both must be seen, with at least three players left. Accepting lets the two participants see each other's cards for the rest of the round. The lower hand packs; the requester packs on a tie. These cards stay private from other players.</p>{game.mode === 'JOKER' && <p>One indicator is drawn before the deal. Every card matching its rank is wild and takes the best possible value. The indicator is kept out of all hands.</p>}<button className="table-button" onClick={() => setRules(false)}>Close rules</button></section>}
+    {rules && <TableDialog title="Table rules" onClose={() => setRules(false)}><section className="table-rules"><p>Three cards each. Trail beats pure sequence, sequence, colour, pair, then high card. Sequences rank AKQ, A23, KQJ, down to 234. Suits have equal value.</p><p>Blind pays the stake; seen pays twice the stake. A raise doubles the blind stake, up to ₹{game.bootAmount * game.maxBetMultiplier}. With two players left, either player can force a show on their turn, even against a blind opponent. Show costs twice the current chaal (four times the blind stake), capped at the pot limit. No acceptance is needed. The requester loses a tie.</p><p>The pot limit is 100× boot (₹{(game.bootAmount * 100).toLocaleString('en-IN')}). The last payment is capped to the remaining amount. At the limit, all active hands are revealed and compared, with no extra fee. Equal best hands split the pot; spare rupees go in table seat order.</p><p>Side show compares with the previous active player. Both must be seen, with at least three players left. Accepting lets the two participants see each other's cards for the rest of the round. The lower hand packs; the requester packs on a tie. These cards stay private from other players.</p>{game.mode === 'JOKER' && <p>Everyone receives two normal cards plus one printed joker. The joker substitutes for the card that makes your best three-card hand. Older rounds with a rank indicator finish under their original rules.</p>}<button className="table-button" onClick={() => setRules(false)}>Close rules</button></section></TableDialog>}
+    {complete && <WinCelebration key={round._id} />}
     <section className="table-stage" aria-label="Teen Patti table">
       <Dealer />
-      <div className="table-arena">
+      <div className="table-arena" data-seats={orderedSeats.length}>
       <div className="table-felt">{!complete && <span className="felt-brand" aria-hidden="true">TEEN PATTI<span>COMPANION</span></span>}</div>
       <div className="table-center">
-      {complete && <div className="table-result-banner" role="status"><Crown size={20} /><h2>{splitPot ? 'Split pot' : `${round.winnerId?.name || round.winnerId?.username || 'Player'} wins`}{winners[0]?.handRank && !splitPot ? ` with ${winners[0].handRank}` : ''}</h2></div>}
+      {complete && <div className="table-result-banner" role="status"><Crown size={32} /><h2>{splitPot ? 'Split pot' : `${round.winnerId?.name || round.winnerId?.username || 'Player'} wins`}{winners[0]?.handRank && !splitPot ? ` with ${winners[0].handRank}` : ''}</h2><strong>₹{round.potAmount.toLocaleString('en-IN')} {splitPot ? 'shared' : 'won'}</strong></div>}
       <div className="table-pot-content"><PotArea potAmount={round?.potAmount} currentBet={round?.currentBet || game.bootAmount} potLimit={potLimit} />
-        {round?.jokerCard && <div className="joker-indicator"><PlayingCard card={round.jokerCard} small /><div className="joker-description"><strong>{rankLabel(round.jokerCard.rank)} is wild</strong><span>All four suits</span></div></div>}
+        {game.mode === 'JOKER' && <span className="joker-rule-note">{round?.jokerCard ? `${rankLabel(round.jokerCard.rank)} is wild · All suits` : 'One joker in every hand'}</span>}
       </div>
       </div>
       {orderedSeats.map((player, index) => {
         const [x, y] = seatPositions[orderedSeats.length][index];
-        return <div className={`seat-position ${y <= 20 ? 'seat-upper' : ''}`} key={idOf(player.userId)} style={{ '--seat-x': `${x}%`, '--seat-y': `${y}%` }}><PlayerCircle player={player} isMe={idOf(player.userId) === myId} isCurrentTurn={round?.status === 'ACTIVE' && idOf(player.userId) === idOf(current?.userId)} jokerRank={round?.jokerCard?.rank} /></div>;
+        return <div className={`seat-position ${y <= 20 ? 'seat-upper' : ''}`} key={idOf(player.userId)} data-seat={index} style={{ '--seat-x': `${x}%`, '--seat-y': `${y}%` }}><PlayerCircle player={player} isMe={idOf(player.userId) === myId} bootAmount={round?.startingBet || game.bootAmount} isCurrentTurn={round?.status === 'ACTIVE' && idOf(player.userId) === idOf(current?.userId)} jokerRank={round?.jokerCard?.rank} /></div>;
       })}
+      {round && me && <div className="my-hand-area"><div className="hand-caption"><span>Your hand</span><strong>{me?.status === 'PACKED' ? 'Packed' : me?.handRank || 'Blind'}</strong>{wallet !== undefined && <small>Available · ₹{wallet.toLocaleString('en-IN')}</small>}</div><CardHand cards={me?.cards} jokerRank={round.jokerCard?.rank} />{me?.status === 'ACTIVE' && !me.seenCards && !complete && <button className="table-button see-cards" disabled={processing || round.status !== 'ACTIVE'} onClick={() => handleAction('SEE')}><Eye size={18} /> See cards</button>}</div>}
       </div>
     </section>
     <section className="table-play-area">
       {!round && <div className="round-message"><h2>Ready to deal</h2><p>{seats.length} players seated. Everyone starts blind.</p>{host ? <button className="table-button button-gold" disabled={processing} onClick={() => perform(() => roundApi.startRound(gameId))}>{processing ? 'Dealing…' : 'Deal first round'}</button> : <p>Waiting for the host to deal.</p>}</div>}
       {round?.status === 'SIDE_SHOW_PENDING' && !legacy && <div className="round-message"><h2>Side show requested</h2><p>{target ? `${requester?.userId?.name || 'A player'} wants to compare hands with you. Accepting lets you both see each other's cards.` : 'Waiting for the previous player to accept or decline.'}</p>{target && <div className="response-controls"><button className="table-button button-gold" disabled={processing} onClick={() => perform(() => roundApi.respondSideShow(round._id, true))}>Accept & compare</button><button className="table-button" disabled={processing} onClick={() => perform(() => roundApi.respondSideShow(round._id, false))}>Decline</button></div>}</div>}
       {legacy && <div className="round-message"><h2>Physical-card round</h2><p>This round started before digital dealing. Compare your physical cards to finish it.</p>{round.status === 'SHOW_PENDING' && host && active.map(p => <button className="table-button" key={idOf(p.userId)} disabled={processing} onClick={() => perform(() => roundApi.submitShowResult(round._id, idOf(p.userId)))}>{p.userId.name} wins</button>)}{round.status === 'SIDE_SHOW_PENDING' && [idOf(request.requestedBy), idOf(request.targetPlayer)].includes(myId) && round.players.filter(p => [idOf(request.requestedBy), idOf(request.targetPlayer)].includes(idOf(p.userId))).map(p => <button className="table-button" key={idOf(p.userId)} disabled={processing} onClick={() => perform(() => roundApi.submitSideShowResult(round._id, idOf(p.userId)))}>{p.userId.name} packs</button>)}</div>}
-      {round && me && <div className="my-hand-area"><div className="hand-caption"><span>Your hand</span><strong>{me?.status === 'PACKED' ? 'Packed' : me?.handRank || 'Playing blind'}</strong>{wallet !== undefined && <small>Available · ₹{wallet.toLocaleString('en-IN')}</small>}</div><CardHand cards={me?.cards} jokerRank={round.jokerCard?.rank} />{me?.status === 'ACTIVE' && !me.seenCards && !complete && <button className="table-button see-cards" disabled={processing || round.status !== 'ACTIVE'} onClick={() => handleAction('SEE')}><Eye size={18} /> See cards</button>}</div>}
-      {complete && <div className="round-message round-result"><h2>{splitPot ? `Split pot · ₹${round.potAmount.toLocaleString('en-IN')}` : `₹${round.potAmount.toLocaleString('en-IN')} won`}</h2>{splitPot && <p>{winners.map(p => `${p.userId.name || p.userId.username}: ₹${p.winAmount.toLocaleString('en-IN')}`).join(' · ')}</p>}<p>{round.completionReason === 'POT_LIMIT' ? 'Pot limit reached. All active hands were compared automatically.' : round.completionReason === 'SHOW' ? 'Hands compared automatically. A tie goes to the player who did not request the show.' : 'Everyone else packed.'}</p>{host ? <button className="table-button button-gold" disabled={processing} onClick={() => perform(() => roundApi.startRound(gameId))}>{processing ? 'Dealing…' : 'Deal next round'}</button> : <p>Waiting for the host to deal the next round.</p>}</div>}
-      {!complete && sideShowHands.map(player => <div className="my-hand-area" key={idOf(player.userId)}><div className="hand-caption"><span>{player.userId?.name || player.userId?.username || 'Player'}'s hand · Side show</span><strong>{player.handRank}</strong></div><CardHand cards={player.cards} jokerRank={round?.jokerCard?.rank} /></div>)}
+
+      {complete && <div className="round-message round-result"><p>{splitPot ? winners.map(p => `${p.userId.name || p.userId.username}: ₹${p.winAmount.toLocaleString('en-IN')}`).join(' · ') : round.completionReason === 'POT_LIMIT' ? 'Pot limit reached · Hands compared' : round.completionReason === 'SHOW' ? 'Show complete · Hands compared' : 'Everyone else packed'}</p>{host ? <button className="table-button button-gold" disabled={processing} onClick={() => perform(() => roundApi.startRound(gameId))}>{processing ? 'Dealing…' : 'Deal next round'}</button> : <p>Waiting for the host to deal.</p>}</div>}
       {round?.status === 'ACTIVE' && me?.status === 'ACTIVE' && <ActionPanel isMyTurn={myTurn} isProcessing={processing} currentBet={round.currentBet} maxBetLimit={round.startingBet * game.maxBetMultiplier} potRemaining={potLimit ? Math.max(0, potLimit - round.potAmount) : undefined} activePlayersCount={active.length} onAction={handleAction} currentPlayerName={current?.userId?.name} seenCards={me.seenCards} canSideShow={me.seenCards && previous?.seenCards} balance={wallet} />}
       {round?.status === 'ACTIVE' && me?.status === 'PACKED' && <p className="spectator-message">You packed. Watch this round and join the next deal.</p>}
-      {round?.sideShowRequest && ['TARGET_WON', 'REQUESTER_WON', 'DECLINED'].includes(round.sideShowRequest.result) && round.status === 'ACTIVE' && <p className="spectator-message" role="status">{round.sideShowRequest.result === 'DECLINED' ? 'Side show declined. Play continues.' : target || idOf(request.requestedBy) === myId ? 'Side show resolved. You can both see each other’s cards for the rest of this round.' : 'Side show resolved. The lower hand packed; their cards are visible only to each other.'}</p>}
+      {round?.sideShowRequest?.result === 'DECLINED' && round.status === 'ACTIVE' && <p className="spectator-message" role="status">Side show declined. Play continues.</p>}
     </section>
-    <footer className="table-footer"><span>{seats.length}/6 seats · {game.mode === 'JOKER' ? 'Random rank joker' : 'Classic rules'}</span>{host && <button className="end-game-button" disabled={processing || (round && !complete)} onClick={() => setConfirmEnd(true)}>End game</button>}</footer>
-    {confirmEnd && <section className="end-confirm"><h2>Finish this game?</h2><p>All scores will be settled and saved in game history.</p><div className="response-controls"><button className="table-button button-gold" disabled={processing} onClick={() => perform(async () => { await gamesApi.endGame(gameId); setConfirmEnd(false); navigate(`/games/${gameId}/history`); })}>Finish & settle</button><button className="table-button" disabled={processing} onClick={() => setConfirmEnd(false)}>Keep playing</button></div></section>}
+    <footer className="table-footer"><span>{seats.length}/6 seats · {game.mode === 'JOKER' ? 'One joker each' : 'Classic rules'}</span>{sideShowHands.length > 0 && <button className="table-icon-button" title="View side-show hands" aria-label="View side-show hands" onClick={() => setDismissedComparison(null)}><Eye size={18} /></button>}{host && <button className="end-game-button" disabled={processing || (round && !complete)} onClick={() => setConfirmEnd(true)}>End game</button>}</footer>
+    {confirmEnd && <TableDialog title="Finish this game?" onClose={() => setConfirmEnd(false)}><section className="end-confirm"><p>All scores will be settled and saved in game history.</p><div className="response-controls"><button className="table-button button-gold" disabled={processing} onClick={() => perform(async () => { await gamesApi.endGame(gameId); setConfirmEnd(false); navigate(`/games/${gameId}/history`); })}>Finish & settle</button><button className="table-button" disabled={processing} onClick={() => setConfirmEnd(false)}>Keep playing</button></div></section></TableDialog>}
+    {comparisonOpen && sideShowHands.length > 0 && <TableDialog title="Side-show comparison" onClose={() => setDismissedComparison(comparison)}><p className="comparison-note">Shared only with the two players in each accepted comparison.</p><div className="comparison-hands">{[me, ...sideShowHands].filter(Boolean).map(player => <div className="comparison-hand" key={idOf(player.userId)}><h3>{idOf(player.userId) === myId ? 'Your hand' : `${player.userId?.name || player.userId?.username || 'Player'}'s hand · Side show`}</h3><CardHand cards={player.cards} jokerRank={round?.jokerCard?.rank} /><strong>{player.handRank}</strong><span>{player.status === 'PACKED' ? 'Packed' : 'Still in the round'}</span></div>)}</div><button className="table-button button-gold" onClick={() => setDismissedComparison(comparison)}>Back to table</button></TableDialog>}
   </main>;
 }

@@ -3,15 +3,16 @@ const { roundForViewer } = require('../src/modules/rounds/round.view');
 const hand = (...codes) => codes.map(code => ({ rank: Number(code.slice(0, -1)), suit: code.slice(-1) }));
 
 describe('Cards and joker rules', () => {
-  test('every deal has three unique cards per player and excludes the indicator', () => {
+  test('Classic deals unique cards; Joker deals two unique natural cards and one printed joker per seat', () => {
     for (const mode of ['CLASSIC', 'JOKER']) {
       for (let count = 2; count <= 6; count++) {
         for (let repeat = 0; repeat < 30; repeat++) {
           const { hands, jokerCard } = dealCards(count, mode);
           expect(hands.every(h => h.length === 3)).toBe(true);
-          const cards = [...hands.flat(), ...(jokerCard ? [jokerCard] : [])];
+          const cards = hands.flat().filter(c => c.suit !== 'J');
+          expect(hands.every(h => h.filter(c => c.suit === 'J').length === (mode === 'JOKER' ? 1 : 0))).toBe(true);
           expect(new Set(cards.map(c => `${c.rank}${c.suit}`)).size).toBe(cards.length);
-          expect(Boolean(jokerCard)).toBe(mode === 'JOKER');
+          expect(jokerCard).toBeNull();
         }
       }
     }
@@ -34,6 +35,13 @@ describe('Cards and joker rules', () => {
     expect(evaluateHand(hand('9S','9H','13D'), 9).score).toEqual([5,13]);
     expect(evaluateHand(hand('9S','9H','9D'), 9).score).toEqual([5,14]);
     expect(evaluateHand(hand('9S','12H','13H'), 9).score).toEqual([4,14]);
+  });
+  test('a printed joker finds the best legal hand without making a natural rank wild', () => {
+    expect(evaluateHand(hand('0J','14H','14D')).score).toEqual([5,14]);
+    expect(evaluateHand(hand('0J','12H','13H')).score).toEqual([4,14]);
+    expect(evaluateHand(hand('0J','2S','8D')).jokerCount).toBe(1);
+    expect(() => evaluateHand(hand('1J','2S','8D'))).toThrow();
+    expect(() => evaluateHand(hand('0S','2S','8D'))).toThrow();
   });
   test('rejects duplicate and malformed hands', () => {
     expect(() => evaluateHand(hand('14S','14S','3H'))).toThrow();

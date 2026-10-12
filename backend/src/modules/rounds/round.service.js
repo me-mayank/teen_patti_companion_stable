@@ -174,7 +174,7 @@ async function startRound(gameId, userId) {
       const round = new Round({ gameId, roundNumber: game.currentRoundNumber + 1, revision: 1, mode: game.mode || 'CLASSIC', jokerCard,
         status: 'ACTIVE', potAmount: 0, potLimit: game.bootAmount * 100, currentBet: game.bootAmount, startingBet: game.bootAmount,
         currentTurnIndex: game.currentRoundNumber % order.length, startedAt: new Date(),
-        players: game.turnOrder.map((userId, index) => ({ userId, cards: hands[index], status: 'ACTIVE', totalContribution: 0, seenCards: false })) });
+        players: game.turnOrder.map((userId, index) => ({ userId, cards: hands[index], status: 'ACTIVE', totalContribution: 0, seenCards: false, lastAction: 'BLIND' })) });
       await chargeBoots(session, game, round);
       await round.save({ session });
       game.currentRoundNumber = round.roundNumber;
@@ -199,8 +199,11 @@ async function committedView(round, game, userId) {
 
 const bet = (roundId, userId) => mutate(roundId, userId, async (session, round, game) => {
   const player = activeTurn(round, game, userId);
+  const contribution = player.totalContribution;
   const completed = await charge(session, game, round, player, stake(round, player), 'BET');
   player.lastBet = player.seenCards ? 'CHAAL' : 'BLIND';
+  player.lastAction = player.lastBet;
+  player.lastBetAmount = player.totalContribution - contribution;
   if (completed) return;
   advance(round);
 });
@@ -208,8 +211,11 @@ const betTwice = (roundId, userId) => mutate(roundId, userId, async (session, ro
   const player = activeTurn(round, game, userId);
   const raised = round.currentBet * 2;
   if (raised > round.startingBet * game.maxBetMultiplier) throw fail('Raise exceeds the table limit');
+  const contribution = player.totalContribution;
   const completed = await charge(session, game, round, player, raised * (player.seenCards ? 2 : 1), 'BET_TWICE');
   player.lastBet = player.seenCards ? 'CHAAL' : 'BLIND';
+  player.lastAction = player.lastBet;
+  player.lastBetAmount = player.totalContribution - contribution;
   if (completed) return;
   round.currentBet = raised;
   advance(round);
@@ -229,13 +235,20 @@ async function seeCards(roundId, userId) {
   const player = round.players.find(p => idOf(p.userId) === idOf(userId));
   if (!player || player.status !== 'ACTIVE') throw fail('Only active players can open their cards', 403);
   if (player.cards?.length !== 3) throw fail('This older round has no digital cards. Finish it before dealing a new round.');
+  if (player.seenCards) return roundViewWithBalance(await Round.populate(round, playerPopulation), game, userId);
   // No money changes here. Patch only the viewer's seen flag and revision,
   // atomically rechecking eligibility so packing/completion cannot be undone.
   // Bets write this same round and retry their transaction on a conflicting reveal.
   const updated = await Round.findOneAndUpdate({ _id: roundId, status: 'ACTIVE',
-    players: { $elemMatch: { userId, status: 'ACTIVE', cards: { $size: 3 } } },
-  }, { $set: { 'players.$.seenCards': true }, $inc: { revision: 1 } }, { new: true }).select(privateRoundFields);
-  if (!updated) throw fail('The round changed before your cards could be opened. Please retry.');
+    players: { $elemMatch: { userId, status: 'ACTIVE', seenCards: { $ne: true }, cards: { $size: 3 } } },
+  }, { $set: { 'players.$.seenCards': true, 'players.$.lastAction': 'SEEN' }, $inc: { revision: 1 } }, { returnDocument: 'after' }).select(privateRoundFields);
+  if (!updated) {
+    // A duplicate reveal may have raced with a paid action. Return the latest
+    // authorized view without changing its action, revision or notifications.
+    const latest = await readRound(Round.findById(roundId));
+    if (latest?.players.some(p => idOf(p.userId) === idOf(userId) && p.seenCards)) return roundViewWithBalance(latest, game, userId);
+    throw fail('The round changed before your cards could be opened. Please retry.');
+  }
   notify(updated);
   return committedView(updated, game, userId);
 }
@@ -275,7 +288,7 @@ const requestShow = (roundId, userId) => mutate(roundId, userId, async (session,
   const active = round.players.filter(p => p.status === 'ACTIVE');
   if (active.length !== 2) throw fail('Show requires exactly two active players');
   const other = active.find(p => idOf(p.userId) !== idOf(userId));
-  if (await charge(session, game, round, player, stake(round, player), 'SHOW_FEE')) return;
+  if (await charge(session, game, round, player, round.currentBet * 4, 'SHOW_FEE')) return;
   if (active.some(p => p.cards?.length !== 3)) { round.status = 'SHOW_PENDING'; return; }
   active.forEach(p => { p.revealed = true; });
   const winner = compareHands(player.cards, other.cards, round.jokerCard?.rank) > 0 ? player : other;

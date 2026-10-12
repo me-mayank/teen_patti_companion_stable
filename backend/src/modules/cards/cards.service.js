@@ -13,12 +13,13 @@ function dealCards(playerCount, mode = 'CLASSIC') {
     const j = randomInt(i + 1);
     [deck[i], deck[j]] = [deck[j], deck[i]];
   }
-  const jokerCard = mode === 'JOKER' ? deck.pop() : null;
   const hands = Array.from({ length: playerCount }, () => []);
-  for (let pass = 0; pass < 3; pass++) {
+  for (let pass = 0; pass < (mode === 'JOKER' ? 2 : 3); pass++) {
     for (const hand of hands) hand.push(deck.pop());
   }
-  return { hands, jokerCard };
+  // Each seat receives its own printed joker, rather than a random wild rank.
+  if (mode === 'JOKER') for (const hand of hands) hand.push({ rank: 0, suit: 'J' });
+  return { hands, jokerCard: null };
 }
 
 function scoreNatural(cards) {
@@ -46,10 +47,11 @@ function compareScores(a, b) {
 }
 
 function evaluateHand(cards, jokerRank = null) {
-  if (!Array.isArray(cards) || cards.length !== 3 || cards.some(c => !Number.isInteger(c.rank) || c.rank < 2 || c.rank > 14 || !SUITS.includes(c.suit)) || new Set(cards.map(cardKey)).size !== 3) {
+  if (!Array.isArray(cards) || cards.length !== 3 || cards.some(c => !c || !(c.rank === 0 && c.suit === 'J') && (!Number.isInteger(c.rank) || c.rank < 2 || c.rank > 14 || !SUITS.includes(c.suit))) || new Set(cards.map(cardKey)).size !== 3) {
     throw new Error('A hand must contain three distinct valid cards');
   }
-  const natural = cards.filter(c => c.rank !== jokerRank);
+  // jokerRank remains supported for rounds already dealt under the older rules.
+  const natural = cards.filter(c => c.suit !== 'J' && c.rank !== jokerRank);
   const wildCount = 3 - natural.length;
   let best = null;
   if (!wildCount) best = scoreNatural(cards);

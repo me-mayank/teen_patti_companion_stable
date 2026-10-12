@@ -1,6 +1,6 @@
 # Teen Patti Companion
 
-Private multiplayer Teen Patti with server-dealt cards, Classic and random-rank Joker modes, blind/seen betting, automatic shows, side shows, and a transaction ledger.
+Private multiplayer Teen Patti with server-dealt cards, Classic and printed-Joker modes, blind/seen betting, automatic shows, side shows, and a transaction ledger.
 
 ## Run locally
 
@@ -26,14 +26,14 @@ For a complete local preview without configuring a database:
 
 ## Rules implemented
 
-- A cryptographically shuffled 52-card deck deals three unique cards per player, in three passes. Tables support 2–6 players. The first turn rotates each round.
-- Joker mode draws an indicator before dealing. All cards of that rank are wild; the indicator itself is excluded from hands. Wild cards take the best legal three-card hand.
+- A cryptographically shuffled 52-card deck deals three unique cards per Classic player, in three passes. Tables support 2–6 players. The first turn rotates each round.
+- Joker mode deals two unique normal cards plus one printed wild joker to every player. Each joker takes the value that makes the best legal three-card hand. Previously dealt random-rank rounds remain finishable under their original rules.
 - Ranking: trail > pure sequence > sequence > colour > pair > high card. Sequence order: AKQ > A23 > KQJ > … > 234. Suits do not break ties.
-- Everyone pays the boot and starts blind. Seeing cards is free and may happen off-turn. Seen stakes are twice blind stakes. A player is marked Seen after opening their hand, then Chaal after placing a seen bet or raise; this does not change their active turn eligibility. A raise doubles the blind stake up to the configured boot multiplier; a seen payment can be twice that blind limit.
+- Everyone pays the boot and starts blind. Seeing cards is free and may happen off-turn. Seen stakes are twice blind stakes. A player is marked Seen after opening their hand, then Chaal after placing a seen bet or raise; this does not change their active turn eligibility. Seats display the last action separately from the turn marker, plus the last Blind/Chaal payment. A raise doubles the blind stake up to the configured boot multiplier (16× boot by default); a seen payment can be twice that blind limit.
 - Digital rounds have a fixed pot limit of **100× the round's boot amount**, including boots and comparison fees. The final payment is limited to the remaining amount. Reaching the cap immediately reveals and compares all active hands (using the joker rank when applicable), without another fee or side-show acceptance. Packed hands remain private. Equal best hands split the pot in whole rupees; any remainder goes to tied winners in table seat order. The normal requester-loses-a-tie rule applies only to comparisons below the cap. Payments, payouts and round completion commit together.
 - Only the current active player may bet, raise, pack, or request comparison. Insufficient funds leave the round and ledger unchanged. Availability includes unsettled balances at other tables.
 - Side show needs at least three active players. The requester and previous active player must both be seen. The requester pays the seen stake; the target accepts or declines. Accepted comparisons automatically pack the lower hand; ties pack the requester. Both participants can see each other's cards for the rest of that round, including packed hands and earlier accepted comparisons. Other players cannot see those hands unless revealed by a final show or the pot limit. Pending and declined requests do not share cards. Declined requests retain their fee and advance the turn.
-- Show needs exactly two active players. On their turn, either player can force a show, including a seen player against a blind opponent; no opponent acceptance is needed. The requester pays their usual stake (blind: 1×, seen: 2×). Hands are compared automatically; ties award the non-requester. Only the two showdown hands are revealed.
+- Show needs exactly two active players. On their turn, either player can force a show, including a seen player against a blind opponent; no opponent acceptance is needed. The requester pays twice the current chaal (4× the current blind stake), whether blind or seen, capped to the remaining pot allowance. Hands are compared automatically; ties award the non-requester. Only the two showdown hands are revealed.
 - When everyone else packs, the last player wins without revealing their hand. The host deals the next round or ends the game and settles balances exactly once.
 - Legacy physical-card rounds remain finishable through the existing manual controls. Digital rounds never accept a client-selected winner.
 
@@ -47,6 +47,8 @@ Actions apply their authenticated round response immediately, without extra tabl
 
 Boot payments batch wallet checks and ledger writes within one transaction. Turn responses reuse the balance checked by that transaction, including payouts. Card reveals update only the viewer’s seen flag and revision atomically; they do not need a financial transaction. Private response details and wallet reads run concurrently outside transactions.
 
-Screens load on demand. The logo is resized for its displayed size, and the classic CC0 vector card deck is loaded once with the card backs, so seeing a hand needs no new artwork request. Card asset attribution is in `frontend/src/assets/licenses/cards.md`.
+Screens load on demand. The table fits the viewport in desktop, portrait and landscape layouts, with compact overlapping three-card fans and a persistent action dock. Rules and end-game confirmation use accessible dialogs. Accepted side shows open a private comparison dialog for the two participants; shared hands remain available through a compact button. Wins have a prominent name, hand result, amount and short confetti animation that respects reduced-motion preferences.
 
-The table features an original illustrated card lounge and two selectable female dealers, Anaya and Tara, standing centrally behind the rail. Enlarged, overlapping card fans use jumbo rank/suit indices and stay visible after a Show. Each card includes its own SVG artwork, so revealing a hand needs no external sprite request. The dealer choice is local to each viewer and remembered in their browser; all dealing and gameplay continue on the server. Table artwork details are in `frontend/src/assets/table/README.md`.
+The active pack uses the supplied Bicycle face sheet, printed joker and red back artwork. SVG windows display the exact source faces; the back's unobscured half is mapped and reflected because the ace covers part of the reference photo. Both image assets preload so card reveals reuse loaded artwork. Attribution and source details are in `frontend/src/assets/licenses/cards.md`. The original CC0 deck remains in the repository for reference. The PWA includes the new deck in its offline cache.
+
+The table keeps its illustrated lounge and selectable dealers, Anaya and Tara. Dealer selection is remembered locally; all dealing, comparison and privacy stay on the server. Table artwork details are in `frontend/src/assets/table/README.md`.

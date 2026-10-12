@@ -10,7 +10,7 @@ const CreateGame = () => {
   const [name, setName] = useState('');
   const [mode, setMode] = useState('CLASSIC');
   const [bootAmount, setBootAmount] = useState(10);
-  const [maxBetMultiplier, setMaxBetMultiplier] = useState(5);
+  const [maxBetMultiplier, setMaxBetMultiplier] = useState(16);
   
   const [users, setUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -119,7 +119,7 @@ const CreateGame = () => {
                   {['CLASSIC', 'JOKER'].map(value => <label key={value} className={`cursor-pointer rounded-xl p-4 border ${mode === value ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-700 bg-slate-950'}`}>
                     <input type="radio" name="mode" value={value} checked={mode === value} onChange={() => setMode(value)} className="mr-2 accent-emerald-500" />
                     <span className="font-semibold">{value === 'CLASSIC' ? 'Classic' : 'Joker'}</span>
-                    <span className="block text-xs text-slate-400 mt-2">{value === 'CLASSIC' ? 'Standard three-card Teen Patti.' : 'A random rank becomes wild each round.'}</span>
+                    <span className="block text-xs text-slate-400 mt-2">{value === 'CLASSIC' ? 'Standard three-card Teen Patti.' : 'Two normal cards and one wild joker for everyone.'}</span>
                   </label>)}
                 </div>
                 <p className="text-xs text-slate-400 mt-3">Three private cards are dealt automatically. Shows are compared by the game.</p>
@@ -138,7 +138,7 @@ const CreateGame = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">Max Bet Limit</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">Blind Limit</label>
                   <div className="relative">
                     <input
                       type="number"

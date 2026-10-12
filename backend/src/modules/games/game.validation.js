@@ -5,7 +5,7 @@ const createGameSchema = z.object({
     name: z.string().trim().min(1, 'Game name is required').max(80),
     mode: z.enum(['CLASSIC', 'JOKER']).default('CLASSIC'),
     bootAmount: z.number().int().min(1, 'Boot amount must be at least 1').max(1000000),
-    maxBetMultiplier: z.number().int().min(1).max(100).default(5),
+    maxBetMultiplier: z.number().int().min(1).max(100).default(16),
   }),
 });
 
