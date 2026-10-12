@@ -34,3 +34,7 @@ The screenshot showed blank white cards after opening while hand ranking and act
 - `DESIGN.md`, `README.md` and asset/license records document the result.
 
 Temporary card-reveal fixture files and browser tabs have been removed. Disposable demo/preview servers are stopped when this turn finishes. The older Impeccable sidecar drift was previously reported and was not repaired as a side effect.
+
+## Two-player Show demo added
+
+`backend/scripts/demo.js` now also seeds `Demo · Two-player Show`, a Classic table with only demo1 and demo2. Existing six-player tables are retained. A disposable HTTP check verified membership, dealing, a seen requester’s Show against a blind opponent, completion, and both hands visible to both accounts. Restart `npm run demo` to create a fresh table; the frontend build is unchanged. Both servers are left stopped.

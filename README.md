@@ -21,6 +21,7 @@ For a complete local preview without configuring a database:
 - Open `http://localhost:5173`.
 - Sign in as `demo1@example.test` through `demo6@example.test`, password `TeenPattiDemo1!`. Demo 1 is the host.
 - Classic and Joker tables are ready for six players. Use separate browser profiles/private windows for separate players.
+- `Demo · Two-player Show` is ready for `demo1@example.test` and `demo2@example.test`. Sign in separately, have demo1 deal the first round, and click Show on the current player's turn. Either player can see their cards before requesting Show; both compared hands appear when it finishes.
 - All accounts and balances are synthetic. The temporary database disappears when the demo stops. The first run downloads MongoDB to `/tmp/teen-patti-mongodb`; Internet access is needed for that initial download.
 
 ## Rules implemented
