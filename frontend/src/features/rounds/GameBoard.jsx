@@ -143,7 +143,14 @@ export default function GameBoard() {
   return <main className="table-screen">
     <header className="table-header">
       <Link className="table-back" to="/" aria-label="Leave table"><ArrowLeft size={20} /></Link>
-      <div className="table-title"><h1>{game.name}</h1><p>{game.mode === 'JOKER' ? 'Joker' : 'Classic'} · Round {round?.roundNumber || 0} · Boot ₹{game.bootAmount}</p></div>
+      <div className="table-summary">
+        <h1 className="table-game-name" title={game.name}>{game.name}</h1>
+        <div className="table-values" aria-label="Table values">
+          <span className="table-value-chip">{game.mode === 'JOKER' ? 'Joker' : 'Classic'}</span>
+          <span className="table-value-chip"><span>Round</span><strong>{round?.roundNumber || 0}</strong></span>
+          <span className="table-value-chip"><span>Boot</span><strong>₹{game.bootAmount.toLocaleString('en-IN')}</strong></span>
+        </div>
+      </div>
       <div className="table-toolbar"><span className={`connection-status ${connected ? 'is-connected' : ''}`} title={connected ? 'Connected to the live table' : 'Reconnecting; the table refreshes automatically'}>{connected ? <Wifi size={16} /> : <WifiOff size={16} />}<span>{connected ? 'Live' : 'Reconnecting'}</span></span><button className="table-icon-button" onClick={() => setRules(!rules)} aria-expanded={rules} aria-label="Table rules"><BookOpen size={20} /></button><Link className="table-icon-button" to={`/games/${gameId}/history`} aria-label="Game history"><History size={20} /></Link></div>
     </header>
     {error && <div className="table-error table-error-banner" role="alert">{error}<button onClick={fetchGameState}>Retry</button></div>}

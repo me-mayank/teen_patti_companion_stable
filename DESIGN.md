@@ -31,8 +31,8 @@ typography:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif"
   table-title:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif"
-    fontSize: "20px"
-    fontWeight: 700
+    fontSize: "13px"
+    fontWeight: 650
   table-label:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif"
     fontSize: "13px"
@@ -139,11 +139,11 @@ The incumbent palette is warm and muted; the table adds felt green and a slightl
 
 The sans-serif carries names, actions, balances and status. Georgia supplies the understated table wordmark and TP mark on card backs. The table uses tabular numerals for financial values.
 
-The desktop table title is bold (20px), supporting header text is compact (13px), action labels are medium-bold (14px) and action amounts are heavier (17px). The pot is the strongest figure (40px, weight 750, line height 1.3). On mobile, the title becomes 16px, action labels 12px and the pot 28px. The table wordmark becomes 15px. These are component roles, not an app-wide display scale.
+The desktop table name is compact (13px) and sits beside individual mode, round and boot value chips (12px); action labels are medium-bold (14px) and action amounts are heavier (17px). The pot is the strongest figure (40px, weight 750, line height 1.3). On mobile, the table name remains available to screen readers, value chips become 11px (10px on the narrowest screens), action labels become 12px and the pot 28px. The table wordmark becomes 15px. These are component roles, not an app-wide display scale.
 
 ## Layout
 
-Existing setup forms use a centered, bounded column with inset cards; the game table has its own geometry. The table stage is at most 1180px wide. A 232px standing dealer sits centrally behind a 400px arena with a straight top rail and rounded ends. On desktop viewports at most 850px tall, the dealer becomes 180px tall and the arena becomes 410px tall. The hand and action area below is at most 860px wide. Header/footer padding is 28px horizontally; the play area uses 24px horizontal padding on desktop.
+Existing setup forms use a centered, bounded column with inset cards; the game table has its own geometry. The table stage is at most 1180px wide. A 232px standing dealer sits centrally behind a 400px arena with a straight top rail and rounded ends. On desktop viewports at most 850px tall, the dealer becomes 180px tall and the arena becomes 410px tall. The hand and action area below is at most 860px wide. The transparent top controls use 16px horizontal padding (8px on mobile), while footer padding remains 28px; the play area uses 24px horizontal padding on desktop.
 
 Two to six occupied seats follow count-specific positions around the rail, leaving the top-center space for the dealer. A signed-in participant is reordered into the bottom position. A spectator keeps the available ordering without an invented own seat. The pot and optional joker indicator share the center. The player's full-size fan sits immediately below their avatar, with the caption and balance below it. The same fan remains in place after a show. Other server-visible hands enlarge beside their seats; concealed hands remain red backs. A completed-round winner message appears above the central pot.
 
@@ -169,7 +169,9 @@ Table controls are substantial, readable actions with a minimum height of 46px, 
 
 ### Navigation
 
-The table header contains a back link, truncated game title, mode/round/boot summary, connection indicator, rules toggle and history link. Icon controls have a minimum height of 44px; their desktop width is at least 44px, reducing to 36px on mobile. Connection text hides on mobile while the icon remains; the entire indicator hides at the narrowest breakpoint. Hover brightens the control surface and text.
+The table has a compact row of floating controls over the lounge background, with no full-width header fill or divider. The game name appears in a small truncated chip on desktop and remains accessible but visually hidden on mobile. Separate static chips show mode, round and boot amount; they resemble compact controls without pretending to be interactive buttons. The live indicator, rules toggle, history link and back link remain available.
+
+Navigation icons have a 36px visible surface within a 44px click/touch target. Value chips are 32px tall and use gold numeric values against a warm dark surface. Desktop controls occupy 60px vertically; mobile controls occupy 52px. Mobile hides connection text, and the narrowest breakpoint hides the connection indicator. Rules and history keep explicit accessible names and keyboard focus.
 
 ### Lounge and dealers
 

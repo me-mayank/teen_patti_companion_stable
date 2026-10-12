@@ -38,3 +38,9 @@ Temporary card-reveal fixture files and browser tabs have been removed. Disposab
 ## Two-player Show demo added
 
 `backend/scripts/demo.js` now also seeds `Demo · Two-player Show`, a Classic table with only demo1 and demo2. Existing six-player tables are retained. A disposable HTTP check verified membership, dealing, a seen requester’s Show against a blind opponent, completion, and both hands visible to both accounts. Restart `npm run demo` to create a fresh table; the frontend build is unchanged. Both servers are left stopped.
+
+## Compact table controls
+
+The large full-width header was replaced with a transparent compact row: a small desktop table-name chip, separate mode/round/boot value chips, and smaller visible navigation surfaces within 44px touch targets. The mobile game name remains accessible. Frontend tests (23), production build and lint passed. The current preview build must be refreshed after rebuilding; an older service-worker cache may need the app’s Reload recovery action.
+
+Compact controls were verified against the latest built stylesheet on desktop (60px row) and 390px/320px mobile (52px row), with transparent header background and no horizontal overflow or control overlap. Rules toggle opens correctly. Screenshot: `/tmp/teen-patti-compact-controls.png`. Use `http://localhost:5173` for a fresh preview origin if `127.0.0.1` retains an old service-worker stylesheet. Temporary verification servers are stopped when this turn finishes.

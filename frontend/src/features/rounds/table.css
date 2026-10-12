@@ -4,14 +4,19 @@
 .table-screen button:focus-visible, .table-screen a:focus-visible { outline:3px solid #ffe1a0; outline-offset:4px; }
 .table-loading { align-items:center; justify-content:center; gap:18px; padding:24px; text-align:center; }
 .table-loading h1 { font-size:28px; font-weight:700; }
-.table-header { display:flex; align-items:center; gap:14px; padding:18px 28px; background:#160f10ed; border-bottom:1px solid #7c5b34; }
-.table-back,.table-icon-button { display:grid; place-items:center; min-height:44px; min-width:44px; border-radius:12px; color:var(--table-muted); background:#2b221a; }
-.table-back:hover,.table-icon-button:hover { background:#3a2d20; color:var(--table-text); }
-.table-title { flex:1; min-width:0; }
-.table-title h1 { font-size:20px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.table-title p { font-size:13px; color:var(--table-muted); margin-top:4px; }
-.table-toolbar { display:flex; align-items:center; gap:10px; }
-.connection-status { display:flex; gap:6px; align-items:center; color:#f4bf86; font-size:12px; }
+.table-header { display:flex; align-items:center; gap:8px; padding:8px 16px; }
+.table-back,.table-icon-button { position:relative; display:grid; place-items:center; height:44px; width:44px; flex-shrink:0; color:var(--table-muted); }
+.table-back:before,.table-icon-button:before { content:''; position:absolute; inset:4px; border-radius:8px; background:#261d17f2; }
+.table-back > svg,.table-icon-button > svg { position:relative; width:18px; height:18px; }
+.table-back:hover:before,.table-icon-button:hover:before { background:#3a2d20; }
+.table-back:hover,.table-icon-button:hover { color:var(--table-text); }
+.table-summary { flex:1; display:flex; align-items:center; gap:8px; min-width:0; }
+.table-game-name { min-width:0; max-width:240px; padding:6px 10px; background:#211812f2; border-radius:8px; font-size:13px; line-height:20px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.table-values { display:flex; align-items:center; gap:4px; flex-shrink:0; }
+.table-value-chip { display:inline-flex; align-items:center; gap:5px; min-height:32px; padding:6px 10px; border-radius:8px; background:#211812f2; color:var(--table-muted); font-size:12px; line-height:20px; white-space:nowrap; }
+.table-value-chip strong { color:#ffe1a0; font-weight:650; }
+.table-toolbar { display:flex; align-items:center; gap:4px; margin-left:auto; }
+.connection-status { display:flex; gap:5px; align-items:center; padding:6px 8px; min-height:32px; border-radius:8px; background:#211812f2; color:#f4bf86; font-size:11px; }
 .connection-status.is-connected { color:#a9d4b7; }
 /* The portrait and rail share a centerline; dealer controls stay out of the seats. */
 .table-stage { --dealer-height:232px; --arena-height:400px; position:relative; width:min(1180px,calc(100% - 48px)); height:calc(var(--dealer-height) + var(--arena-height)); margin:8px auto 0; isolation:isolate; }
@@ -121,7 +126,9 @@
 }
 @media (max-width:600px) {
  .table-screen { background-attachment:scroll; background-position:center top; background-size:100% 100%,auto 920px; }
- .table-header { padding:12px; gap:10px; } .table-title h1 { font-size:16px; } .table-title p { font-size:11px; } .connection-status span { display:none; } .table-toolbar { gap:5px; } .table-icon-button { min-width:36px; } .table-back { min-width:36px; }
+ .table-header { padding:4px 8px; gap:4px; } .table-summary { gap:0; } .table-values { gap:3px; flex-shrink:1; flex-wrap:wrap; min-width:0; } .table-value-chip { padding:5px 7px; font-size:11px; gap:4px; }
+ .table-game-name { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+ .connection-status span { display:none; } .connection-status { padding:6px; } .table-toolbar { gap:0; }
  .table-stage { --dealer-height:144px; --arena-height:420px; width:100%; margin-top:8px; }
  .dealer-details { right:8px; top:8px; } .dealer-heading { flex-direction:column; align-items:flex-end; gap:0; margin-bottom:4px; } .dealer-heading strong { font-size:14px; } .dealer-heading span { font-size:10px; }
  .dealer-picker { flex-direction:column; padding:2px; gap:2px; } .dealer-option { min-width:56px; min-height:44px; padding:6px 8px; font-size:11px; }
@@ -138,5 +145,5 @@
  .action-panel { padding:10px; } .bet-controls { gap:6px; } .bet-controls .table-button { font-size:12px; padding:10px 4px; } .table-button strong { font-size:14px; } .turn-message { font-size:13px; }
  .table-footer { padding:10px 14px; font-size:11px; } .round-message h2 { font-size:21px; } .table-error-banner { padding:10px 14px; }
 }
-@media (max-width:370px) { .connection-status { display:none; } .table-stage { --arena-height:420px; } .seat-position { width:94px; } .seat-name { max-width:91px; } .bet-controls { grid-template-columns:repeat(2,1fr); } }
+@media (max-width:370px) { .table-header { padding-inline:4px; } .table-value-chip { padding-inline:5px; font-size:10px; gap:3px; } .table-values { gap:2px; } .connection-status { display:none; } .table-stage { --arena-height:420px; } .seat-position { width:94px; } .seat-name { max-width:91px; } .bet-controls { grid-template-columns:repeat(2,1fr); } }
 @media (prefers-reduced-motion:reduce) { .playing-card { animation:none; } .table-screen * { transition:none; } }
