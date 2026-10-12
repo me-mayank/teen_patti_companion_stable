@@ -12,3 +12,13 @@ Verified on 12 October 2026 on `codex/compact-table-gameplay-fixes`.
 - Design detector reported no deterministic issues; `git diff --check` passed.
 
 All browser accounts, balances and rounds used the disposable local demo. The source Bicycle references are retained exactly; the back is reconstructed from the unobscured half because the ace covers part of it. Source details are in `frontend/src/assets/licenses/cards.md`.
+
+## Review follow-up — 12 October 2026
+
+- Reviewed commit `9fd490e` against its parent, the supplied requirements, README and DESIGN.md. Findings and resolutions are in `REVIEW.md`.
+- Backend: **72 tests passed**. A deterministic delayed-reveal regression failed before the fix (Seen incorrectly replaced Chaal), then passed. Repeated reveals now preserve the revision and emit no update notification.
+- Frontend: **28 tests passed**. Added checks for legacy wild-rank visibility, dismissed comparisons staying closed when a hand becomes public, and new comparisons still opening automatically.
+- Production build passed with 37 precache entries; lint retained eight existing warnings and no errors. The design scan and `git diff --check` passed.
+- Browser: inspected the current table at 1280×720, 390×844, 320×568 and 844×390. Portrait and landscape document dimensions matched the viewport. Fixed the lower-left six-player seat being obscured by the landscape action dock; all six seat bottoms are now above the dock at 844×390.
+- Browser: closing Table rules now restores focus to its opener. Previously focus returned to the document body.
+- Visual checks used the disposable local demo on a fresh frontend port because older preview origins served cached UI. Its socket origin is not in the demo server's allowlist, so those visual checks used the fallback refresh and showed Reconnecting. Automated backend coverage includes socket access and private-data restrictions; this pass does not claim a fresh multi-browser realtime smoke test.

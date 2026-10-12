@@ -172,6 +172,56 @@ test('accepted side shows display the compared hand for both participants, inclu
   }
 });
 
+test('legacy Joker rounds identify the public wild rank while the viewer stays blind', async () => {
+  const table = board();
+  table.getters.game = () => Promise.resolve({ ...game, mode: 'JOKER' });
+  table.getters.round = () => Promise.resolve({ ...initialRound, jokerCard: { rank: 7, suit: 'H' } });
+  table.render(); await tick(); table.render();
+  const label = table.findAll('span').find(node => node.props.className === 'joker-rule-note');
+  assert.ok(label.props.children.flat(Infinity).join('').includes('7 is wild'));
+  assert.equal(table.find('CardHand').props.cards, undefined);
+  table.cleanup();
+});
+
+test('a completed Show does not reopen a dismissed comparison when a shared hand becomes public', async () => {
+  const table = board();
+  const hand = [{ rank: 14, suit: 'S' }, { rank: 12, suit: 'H' }, { rank: 9, suit: 'D' }];
+  const result = { ...initialRound, players: [
+    { ...initialRound.players[0], seenCards: true, cards: hand },
+    { ...initialRound.players[1], seenCards: true, cards: hand },
+    { userId: { _id: 'packed' }, status: 'PACKED', seenCards: true, cards: hand },
+  ] };
+  table.getters.round = () => Promise.resolve(result);
+  table.render(); await tick(); table.render();
+  table.find('TableDialog').props.onClose(); table.render();
+  assert.equal(table.find('TableDialog'), undefined);
+  table.getters.round = () => Promise.resolve({ ...result, status: 'COMPLETED', completionReason: 'SHOW',
+    players: result.players.map(p => p.userId._id === 'packed' ? p : { ...p, revealed: true }) });
+  table.emit('round:update'); await tick(); table.render();
+  assert.equal(table.find('TableDialog'), undefined, 'Old comparisons must not cover the winner announcement');
+  table.findAll('button').find(node => node.props['aria-label'] === 'View side-show hands').props.onClick();
+  table.render();
+  assert.ok(table.find('TableDialog'), 'Manual reopening remains available');
+  table.cleanup();
+});
+
+test('a newly shared hand or a new round still opens its comparison after an earlier dismissal', async () => {
+  const table = board();
+  const hand = [{ rank: 14, suit: 'S' }, { rank: 12, suit: 'H' }, { rank: 9, suit: 'D' }];
+  let result = { ...initialRound, players: initialRound.players.map(p => ({ ...p, seenCards: true, cards: hand })) };
+  table.getters.round = () => Promise.resolve(result);
+  table.render(); await tick(); table.render();
+  table.find('TableDialog').props.onClose(); table.render();
+  result = { ...result, players: [...result.players, { userId: { _id: 'new-opponent' }, status: 'PACKED', cards: hand }] };
+  table.emit('round:update'); await tick(); table.render();
+  assert.ok(table.find('TableDialog'), 'Newly shared hands should open automatically');
+  table.find('TableDialog').props.onClose(); table.render();
+  result = { ...result, _id: 'next-round', roundNumber: 2 };
+  table.emit('round:update'); await tick(); table.render();
+  assert.ok(table.find('TableDialog'), 'A previous round must not suppress a new comparison');
+  table.cleanup();
+});
+
 test('a completed show retains the viewer\'s full-size hand and the server-revealed opponent cards', async () => {
   const table = board();
   const own = [{ rank: 10, suit: 'C' }, { rank: 6, suit: 'S' }, { rank: 11, suit: 'S' }];

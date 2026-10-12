@@ -9,7 +9,7 @@ import PlayerCircle from './components/PlayerCircle';
 import PotArea from './components/PotArea';
 import ActionPanel from './components/ActionPanel';
 import Dealer from './components/Dealer';
-import { CardHand, CardArtworkPreload } from './components/PlayingCard';
+import { CardHand, CardArtworkPreload, rankLabel } from './components/PlayingCard';
 import TableDialog from './components/TableDialog';
 import WinCelebration from './components/WinCelebration';
 import { createTableSync } from './tableSync';
@@ -39,7 +39,7 @@ export default function GameBoard() {
   const [connected, setConnected] = useState(false);
   const [rules, setRules] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
-  const [dismissedComparison, setDismissedComparison] = useState('');
+  const [dismissedComparison, setDismissedComparison] = useState(null);
   const busy = useRef(false);
   const tableSync = useRef(null);
   const scheduler = useRef(null);
@@ -133,8 +133,10 @@ export default function GameBoard() {
   const requester = round?.players.find(p => idOf(p.userId) === idOf(request?.requestedBy));
   const complete = round?.status === 'COMPLETED';
   const sideShowHands = round?.players.filter(p => idOf(p.userId) !== myId && p.cards?.length === 3 && !p.revealed) || [];
-  const comparisonKey = sideShowHands.length ? `${round._id}:${sideShowHands.map(p => idOf(p.userId)).sort().join(':')}` : '';
-  const comparisonOpen = comparisonKey && dismissedComparison !== comparisonKey;
+  const comparison = { roundId: round?._id, playerIds: sideShowHands.map(p => idOf(p.userId)) };
+  // Publicly revealed hands leaving this list must not reopen an old dialog.
+  const comparisonOpen = sideShowHands.length > 0 && (dismissedComparison?.roundId !== comparison.roundId
+    || comparison.playerIds.some(id => !dismissedComparison.playerIds.includes(id)));
   const wallet = round?.availableBalance;
   const winners = round?.players.filter(p => p.status === 'WINNER') || [];
   const splitPot = winners.length > 1;
@@ -169,7 +171,7 @@ export default function GameBoard() {
       <div className="table-center">
       {complete && <div className="table-result-banner" role="status"><Crown size={32} /><h2>{splitPot ? 'Split pot' : `${round.winnerId?.name || round.winnerId?.username || 'Player'} wins`}{winners[0]?.handRank && !splitPot ? ` with ${winners[0].handRank}` : ''}</h2><strong>₹{round.potAmount.toLocaleString('en-IN')} {splitPot ? 'shared' : 'won'}</strong></div>}
       <div className="table-pot-content"><PotArea potAmount={round?.potAmount} currentBet={round?.currentBet || game.bootAmount} potLimit={potLimit} />
-        {game.mode === 'JOKER' && <span className="joker-rule-note">{round?.jokerCard ? 'Legacy rank joker' : 'One joker in every hand'}</span>}
+        {game.mode === 'JOKER' && <span className="joker-rule-note">{round?.jokerCard ? `${rankLabel(round.jokerCard.rank)} is wild · All suits` : 'One joker in every hand'}</span>}
       </div>
       </div>
       {orderedSeats.map((player, index) => {
@@ -189,8 +191,8 @@ export default function GameBoard() {
       {round?.status === 'ACTIVE' && me?.status === 'PACKED' && <p className="spectator-message">You packed. Watch this round and join the next deal.</p>}
       {round?.sideShowRequest?.result === 'DECLINED' && round.status === 'ACTIVE' && <p className="spectator-message" role="status">Side show declined. Play continues.</p>}
     </section>
-    <footer className="table-footer"><span>{seats.length}/6 seats · {game.mode === 'JOKER' ? 'One joker each' : 'Classic rules'}</span>{sideShowHands.length > 0 && <button className="table-icon-button" title="View side-show hands" aria-label="View side-show hands" onClick={() => setDismissedComparison('')}><Eye size={18} /></button>}{host && <button className="end-game-button" disabled={processing || (round && !complete)} onClick={() => setConfirmEnd(true)}>End game</button>}</footer>
+    <footer className="table-footer"><span>{seats.length}/6 seats · {game.mode === 'JOKER' ? 'One joker each' : 'Classic rules'}</span>{sideShowHands.length > 0 && <button className="table-icon-button" title="View side-show hands" aria-label="View side-show hands" onClick={() => setDismissedComparison(null)}><Eye size={18} /></button>}{host && <button className="end-game-button" disabled={processing || (round && !complete)} onClick={() => setConfirmEnd(true)}>End game</button>}</footer>
     {confirmEnd && <TableDialog title="Finish this game?" onClose={() => setConfirmEnd(false)}><section className="end-confirm"><p>All scores will be settled and saved in game history.</p><div className="response-controls"><button className="table-button button-gold" disabled={processing} onClick={() => perform(async () => { await gamesApi.endGame(gameId); setConfirmEnd(false); navigate(`/games/${gameId}/history`); })}>Finish & settle</button><button className="table-button" disabled={processing} onClick={() => setConfirmEnd(false)}>Keep playing</button></div></section></TableDialog>}
-    {comparisonOpen && sideShowHands.length > 0 && <TableDialog title="Side-show comparison" onClose={() => setDismissedComparison(comparisonKey)}><p className="comparison-note">Shared only with the two players in each accepted comparison.</p><div className="comparison-hands">{[me, ...sideShowHands].filter(Boolean).map(player => <div className="comparison-hand" key={idOf(player.userId)}><h3>{idOf(player.userId) === myId ? 'Your hand' : `${player.userId?.name || player.userId?.username || 'Player'}'s hand · Side show`}</h3><CardHand cards={player.cards} jokerRank={round?.jokerCard?.rank} /><strong>{player.handRank}</strong><span>{player.status === 'PACKED' ? 'Packed' : 'Still in the round'}</span></div>)}</div><button className="table-button button-gold" onClick={() => setDismissedComparison(comparisonKey)}>Back to table</button></TableDialog>}
+    {comparisonOpen && sideShowHands.length > 0 && <TableDialog title="Side-show comparison" onClose={() => setDismissedComparison(comparison)}><p className="comparison-note">Shared only with the two players in each accepted comparison.</p><div className="comparison-hands">{[me, ...sideShowHands].filter(Boolean).map(player => <div className="comparison-hand" key={idOf(player.userId)}><h3>{idOf(player.userId) === myId ? 'Your hand' : `${player.userId?.name || player.userId?.username || 'Player'}'s hand · Side show`}</h3><CardHand cards={player.cards} jokerRank={round?.jokerCard?.rank} /><strong>{player.handRank}</strong><span>{player.status === 'PACKED' ? 'Packed' : 'Still in the round'}</span></div>)}</div><button className="table-button button-gold" onClick={() => setDismissedComparison(comparison)}>Back to table</button></TableDialog>}
   </main>;
 }

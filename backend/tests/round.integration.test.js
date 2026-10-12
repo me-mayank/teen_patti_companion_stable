@@ -163,6 +163,50 @@ test.each(['bet', 'bet-twice'])('%s marks Chaal only after a seen player pays', 
   expect((await get(`/rounds/${round._id}`, 2)).body.players[0].cards).toBeUndefined();
 });
 
+test('a delayed duplicate reveal cannot overwrite a newer Chaal or emit another revision', async () => {
+  const round = await deal();
+  const service = require('../src/modules/rounds/round.service');
+  const findById = Round.findById.bind(Round);
+  let release, read;
+  const paused = new Promise(resolve => { read = resolve; });
+  const resume = new Promise(resolve => { release = resolve; });
+  // Delay exactly one real database read after it captured the blind state.
+  const spy = jest.spyOn(Round, 'findById').mockImplementationOnce((...args) => {
+    const query = findById(...args);
+    const lean = query.lean.bind(query);
+    query.lean = async () => { const value = await lean(); read(); await resume; return value; };
+    return query;
+  });
+  const delayed = service.seeCards(round._id, players[0]._id);
+  try {
+    await paused;
+    expect((await post(`/rounds/${round._id}/see-cards`)).status).toBe(200);
+    const paid = await post(`/rounds/${round._id}/bet`);
+    expect(paid.status).toBe(200);
+    emit.mockClear();
+    release();
+    const result = await delayed;
+    expect(result.players[0].lastAction).toBe('CHAAL');
+    expect(result.players[0].lastBetAmount).toBe(20);
+    expect(result.revision).toBe(paid.body.revision);
+    expect(emit).not.toHaveBeenCalled();
+    expect((await stored(round)).players[0].lastAction).toBe('CHAAL');
+  } finally { release(); await delayed.catch(() => {}); spy.mockRestore(); }
+});
+
+test('reopening seen cards is read-only and keeps the latest payment', async () => {
+  const round = await deal();
+  await post(`/rounds/${round._id}/see-cards`);
+  const paid = await post(`/rounds/${round._id}/bet`);
+  emit.mockClear();
+  const repeated = await post(`/rounds/${round._id}/see-cards`);
+  expect(repeated.status).toBe(200);
+  expect(repeated.body.revision).toBe(paid.body.revision);
+  expect(repeated.body.players[0].lastAction).toBe('CHAAL');
+  expect(repeated.body.players[0].cards).toHaveLength(3);
+  expect(emit).not.toHaveBeenCalled();
+});
+
 test('concurrent deals at different tables cannot spend the same shared wallets twice', async () => {
   await User.updateMany({ _id: { $in: players.slice(0, 3).map(player => player._id) } }, { $set: { globalBalance: 10 } });
   const other = await Game.create({ name: 'Second table', createdBy: players[0]._id, bootAmount: 10, status: 'ACTIVE',

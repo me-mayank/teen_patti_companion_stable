@@ -176,7 +176,7 @@
  .hand-small .playing-card,.seat-revealed .hand-small .playing-card { width:28px; height:39px; } .hand-small .playing-card + .playing-card,.seat-revealed .hand-small .playing-card + .playing-card { margin-left:-16px; }
  .seat-position:has(.seat-me) { left:calc(50% - 124px); bottom:16px; width:110px; }
  .seat-upper { top:24%; }
- .table-arena[data-seats="6"] > [data-seat="1"] { left:22%; top:76%; }
+ .table-arena[data-seats="6"] > [data-seat="1"] { left:22%; top:62%; }
  .playing-card { width:48px; height:67px; } .card-hand .playing-card + .playing-card { margin-left:-27px; }
  .hand-small .playing-card + .playing-card { margin-left:-16px; }
  .table-center { top:16%; } .pot-area > small { display:none; } .pot-area > strong { font-size:26px; } .chip-stack { display:none; }

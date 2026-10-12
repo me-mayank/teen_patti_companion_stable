@@ -235,13 +235,20 @@ async function seeCards(roundId, userId) {
   const player = round.players.find(p => idOf(p.userId) === idOf(userId));
   if (!player || player.status !== 'ACTIVE') throw fail('Only active players can open their cards', 403);
   if (player.cards?.length !== 3) throw fail('This older round has no digital cards. Finish it before dealing a new round.');
+  if (player.seenCards) return roundViewWithBalance(await Round.populate(round, playerPopulation), game, userId);
   // No money changes here. Patch only the viewer's seen flag and revision,
   // atomically rechecking eligibility so packing/completion cannot be undone.
   // Bets write this same round and retry their transaction on a conflicting reveal.
   const updated = await Round.findOneAndUpdate({ _id: roundId, status: 'ACTIVE',
-    players: { $elemMatch: { userId, status: 'ACTIVE', cards: { $size: 3 } } },
-  }, { $set: { 'players.$.seenCards': true, ...(!player.seenCards ? { 'players.$.lastAction': 'SEEN' } : {}) }, $inc: { revision: 1 } }, { new: true }).select(privateRoundFields);
-  if (!updated) throw fail('The round changed before your cards could be opened. Please retry.');
+    players: { $elemMatch: { userId, status: 'ACTIVE', seenCards: { $ne: true }, cards: { $size: 3 } } },
+  }, { $set: { 'players.$.seenCards': true, 'players.$.lastAction': 'SEEN' }, $inc: { revision: 1 } }, { returnDocument: 'after' }).select(privateRoundFields);
+  if (!updated) {
+    // A duplicate reveal may have raced with a paid action. Return the latest
+    // authorized view without changing its action, revision or notifications.
+    const latest = await readRound(Round.findById(roundId));
+    if (latest?.players.some(p => idOf(p.userId) === idOf(userId) && p.seenCards)) return roundViewWithBalance(latest, game, userId);
+    throw fail('The round changed before your cards could be opened. Please retry.');
+  }
   notify(updated);
   return committedView(updated, game, userId);
 }
