@@ -163,6 +163,21 @@ test('accepted side shows display the compared hand for both participants, inclu
   }
 });
 
+test('a completed show retains the viewer\'s full-size hand and the server-revealed opponent cards', async () => {
+  const table = board();
+  const own = [{ rank: 10, suit: 'C' }, { rank: 6, suit: 'S' }, { rank: 11, suit: 'S' }];
+  const other = [{ rank: 3, suit: 'S' }, { rank: 10, suit: 'H' }, { rank: 12, suit: 'S' }];
+  const result = { ...initialRound, status: 'COMPLETED', completionReason: 'SHOW', winnerId: { _id: 'other', name: 'Opponent' },
+    players: [{ ...initialRound.players[0], cards: own, revealed: true, seenCards: true, handRank: 'High card' },
+      { ...initialRound.players[1], status: 'WINNER', cards: other, revealed: true, handRank: 'High card' }] };
+  table.getters.round = () => Promise.resolve(result);
+  table.render(); await tick(); table.render();
+  assert.deepEqual(table.find('CardHand').props.cards, own);
+  assert.deepEqual(table.findAll('PlayerCircle')[1].props.player.cards, other);
+  assert.equal(table.find('ActionPanel'), undefined);
+  table.cleanup();
+});
+
 test('socket bursts refresh only the round and combine duplicate notifications', async () => {
   const table = board();
   table.render(); await tick(); table.render(); table.calls.length = 0;

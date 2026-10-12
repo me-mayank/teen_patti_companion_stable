@@ -48,4 +48,4 @@ Boot payments batch wallet checks and ledger writes within one transaction. Turn
 
 Screens load on demand. The logo is resized for its displayed size, and the classic CC0 vector card deck is loaded once with the card backs, so seeing a hand needs no new artwork request. Card asset attribution is in `frontend/src/assets/licenses/cards.md`.
 
-The table features an original illustrated card lounge and two selectable female dealer characters: Anaya and Tara. The dealer choice is local to each viewer and remembered in their browser; all dealing and gameplay continue on the server. Table artwork details are in `frontend/src/assets/table/README.md`.
+The table features an original illustrated card lounge and two selectable female dealers, Anaya and Tara, standing centrally behind the rail. Enlarged, overlapping card fans use jumbo rank/suit indices and stay visible after a Show. Each card includes its own SVG artwork, so revealing a hand needs no external sprite request. The dealer choice is local to each viewer and remembered in their browser; all dealing and gameplay continue on the server. Table artwork details are in `frontend/src/assets/table/README.md`.

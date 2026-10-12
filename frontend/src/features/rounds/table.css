@@ -13,61 +13,71 @@
 .table-toolbar { display:flex; align-items:center; gap:10px; }
 .connection-status { display:flex; gap:6px; align-items:center; color:#f4bf86; font-size:12px; }
 .connection-status.is-connected { color:#a9d4b7; }
-.dealer-bar { display:flex; align-items:flex-end; justify-content:center; gap:18px; width:min(720px,100%); margin:8px auto -6px; min-height:150px; padding:0 20px; }
-.dealer-portrait { width:150px; height:166px; object-fit:contain; object-position:center bottom; filter:drop-shadow(0 8px 12px #08050588); }
-.dealer-details { padding-bottom:16px; }
-.dealer-heading { display:flex; align-items:baseline; flex-wrap:wrap; gap:10px; width:fit-content; margin-bottom:10px; padding:5px 10px; background:#1e1411f2; border-radius:6px; }
-.dealer-heading strong { font-size:22px; font-family:Georgia,serif; color:#ffe2ad; }
+/* The portrait and rail share a centerline; dealer controls stay out of the seats. */
+.table-stage { --dealer-height:232px; --arena-height:400px; position:relative; width:min(1180px,calc(100% - 48px)); height:calc(var(--dealer-height) + var(--arena-height)); margin:8px auto 0; isolation:isolate; }
+.table-dealer { position:absolute; inset:0 0 auto; height:var(--dealer-height); z-index:1; pointer-events:none; }
+.dealer-portrait { position:absolute; left:50%; bottom:-12px; transform:translateX(-50%); width:calc(var(--dealer-height)*1.5); height:var(--dealer-height); object-fit:contain; filter:drop-shadow(0 8px 12px #08050588); }
+.dealer-details { position:absolute; right:24px; top:24px; pointer-events:auto; }
+.dealer-heading { display:flex; align-items:baseline; gap:8px; margin-bottom:8px; text-shadow:0 2px 4px #000; }
+.dealer-heading strong { font-size:18px; font-family:Georgia,serif; color:#ffe2ad; }
 .dealer-heading span { font-size:12px; color:var(--table-muted); }
-.dealer-picker { display:flex; gap:4px; padding:4px; background:#1e1411ee; border:1px solid #735537; border-radius:10px; }
+.dealer-picker { display:flex; gap:4px; padding:4px; background:#1e1411f2; border:1px solid #735537; border-radius:10px; }
 .dealer-option { min-height:44px; min-width:64px; padding:8px 12px; color:var(--table-muted); border-radius:6px; cursor:pointer; font-size:12px; transition:background .15s,color .15s; }
 .dealer-option:hover { color:#fff2d8; background:#4c3424; }
 .dealer-option[aria-pressed="true"] { color:#281b0c; background:var(--table-gold); font-weight:700; }
-.table-stage { position:relative; width:min(900px,100%); height:440px; margin:22px auto 0; isolation:isolate; }
-.table-felt { position:absolute; inset:42px 75px; border-radius:48%; background:radial-gradient(ellipse at 50% 30%,#328968,#14583e 55%,#093d2b); border:14px solid #75502d; box-shadow:inset 0 0 0 3px #f3cd80,inset 0 0 0 7px #153f2c,inset 0 8px 32px #072b20,0 3px 0 3px #bd8b4b,0 7px 0 6px #362114,0 18px 38px #080705b3; }
-.table-felt:after { content:''; position:absolute; inset:14px; border:1px solid #d9ce8966; border-radius:48%; }
-.felt-brand { position:absolute; top:25%; left:50%; transform:translateX(-50%); text-align:center; color:#bcd0a8; opacity:.42; font-family:Georgia,serif; font-weight:bold; font-size:23px; letter-spacing:.05em; white-space:nowrap; }
+.table-arena { position:absolute; inset:var(--dealer-height) 0 0; }
+.table-felt { position:absolute; inset:0 64px 36px; border-radius:180px; background:radial-gradient(ellipse at 50% 25%,#389a78,#1a6b4e 58%,#104b36); border:16px solid #513721; box-shadow:inset 0 0 0 3px #f3cd80,inset 0 0 0 8px #153f2c,inset 0 8px 32px #072b20,0 3px 0 3px #bd8b4b,0 7px 0 8px #241811,0 22px 36px #080705b3; }
+.table-felt:after { content:''; position:absolute; inset:14px; border:1px solid #d9ce8966; border-radius:inherit; }
+.felt-brand { position:absolute; top:22%; left:50%; transform:translateX(-50%); text-align:center; color:#bcd0a8; opacity:.42; font-family:Georgia,serif; font-weight:bold; font-size:25px; letter-spacing:.05em; white-space:nowrap; }
 .felt-brand span { display:block; font-family:inherit; font-size:10px; letter-spacing:.2em; }
-.table-center { position:absolute; left:50%; top:53%; transform:translate(-50%,-50%); display:flex; align-items:center; gap:24px; }
+.table-result-banner { display:flex; align-items:center; justify-content:center; gap:8px; width:max-content; max-width:300px; padding:8px 16px; border-radius:8px; background:#102b21f2; color:#ffe1a0; text-align:center; }
+.table-result-banner h2 { font-size:16px; font-weight:650; text-wrap:balance; }
+.table-result-banner svg { flex-shrink:0; }
+.table-center { position:absolute; left:50%; top:48%; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:12px; }
+.table-center:has(.table-result-banner) { top:48%; }
+.table-pot-content { display:flex; align-items:center; gap:24px; }
 .pot-area { display:flex; align-items:center; flex-direction:column; white-space:nowrap; }
 .pot-area > span { color:#d5e1d2; font-size:12px; }
-.pot-area > strong { color:#fff3c2; font-size:34px; font-weight:750; line-height:1.3; }
+.pot-area > strong { color:#fff3c2; font-size:40px; font-weight:750; line-height:1.3; }
 .pot-area > small { font-size:11px; color:#c1d8c9; }
 .chip-stack { color:#f0c273; width:45px; height:28px; display:grid; place-items:center; margin-bottom:5px; }
 .chip-stack i { display:none; }
 .joker-indicator { display:flex; align-items:center; gap:10px; }
 .joker-indicator strong { display:block; color:#ffe0a1; font-size:14px; }
 .joker-indicator > .joker-description > span { color:#d5e1d2; font-size:11px; }
-.seat-position { position:absolute; transform:translate(-50%,-50%); z-index:2; width:130px; }
+.seat-position { position:absolute; left:var(--seat-x); top:var(--seat-y); transform:translate(-50%,-50%); z-index:2; width:180px; }
 .player-seat { display:flex; align-items:center; flex-direction:column; position:relative; }
-.seat-avatar { width:48px; height:48px; display:grid; place-items:center; background:#30251c; border:2px solid #d3a45c; box-shadow:0 3px 8px #08050599; border-radius:50%; color:#f3d298; font-size:22px; font-weight:650; margin-top:-9px; position:relative; }
+.seat-avatar { width:54px; height:54px; display:grid; place-items:center; background:#30251c; border:2px solid #d3a45c; box-shadow:0 3px 8px #08050599; border-radius:50%; color:#f3d298; font-size:22px; font-weight:650; margin-top:-9px; position:relative; }
 .seat-avatar img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
 .seat-avatar svg { position:absolute; right:-7px; top:-7px; color:#ffe4a5; }
 .seat-current .seat-avatar { outline:3px solid #f0c273; outline-offset:3px; }
-.seat-name { font-size:13px; max-width:128px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:6px; }
+.seat-name { font-size:13px; max-width:160px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:6px; }
 .seat-status { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:#d9c8ac; background:#241b14; padding:2px 9px; border-radius:5px; }
 .seat-current .seat-status { color:#1f160b; background:#f0c273; font-weight:750; }
 .seat-contribution { font-size:11px; color:#d0c0a5; margin-top:3px; }
 .seat-packed .seat-avatar { opacity:.55; }
 .seat-packed .seat-status { color:#ffb4a6; }
-.card-hand { display:flex; gap:8px; align-items:center; }
-/* A shared vector deck is loaded with the backs, so revealing a hand needs no new image download. */
-.playing-card { width:76px; height:106px; border-radius:7px; background:#fff; box-shadow:0 2px 3px #0004,0 5px 12px #0004; position:relative; flex-shrink:0; transform:rotate(calc((var(--card-index) - 1)*4deg)); }
+.card-hand { display:flex; gap:0; align-items:flex-end; padding:10px 14px; }
+.playing-card { width:110px; height:154px; border-radius:6px; background:#fff; box-shadow:0 3px 6px #0005,0 8px 18px #0005; position:relative; flex-shrink:0; transform-origin:50% 85%; transform:rotate(calc((var(--card-index) - 1)*9deg)) translateY(calc((var(--card-index) - 1)*(var(--card-index) - 1)*4px)); }
+.card-hand .playing-card + .playing-card { margin-left:-42px; }
 .card-art { display:block; width:100%; height:100%; overflow:hidden; border-radius:inherit; }
 .card-back { animation:deal-in .18s ease-out both; }
-.card-small { width:32px; height:45px; border-radius:4px; }
-.hand-small { gap:3px; }
-.hand-small .playing-card:nth-child(1) { transform:rotate(-12deg) translateY(3px); }
-.hand-small .playing-card:nth-child(3) { transform:rotate(12deg) translateY(3px); }
+.card-small { width:50px; height:70px; border-radius:4px; }
+.hand-small { padding:6px 8px; }
+.hand-small .playing-card + .playing-card { margin-left:-22px; }
+.seat-revealed .hand-small .playing-card { width:70px; height:98px; }
+.seat-revealed .hand-small .playing-card + .playing-card { margin-left:-32px; }
+.seat-me .seat-avatar { margin-top:0; }
 .card-wild { outline:2px solid #f2be51; }
-.wild-label { position:absolute; bottom:3px; left:50%; transform:translateX(-50%); font-size:8px; font-weight:800; background:#f2be51; color:#322111; padding:1px 3px; border-radius:2px; }
-.card-small .wild-label { font-size:6px; bottom:1px; padding:0 1px; }
-.table-play-area { width:min(720px,100%); margin:8px auto 0; padding:16px 24px 20px; background:#140f0de6; border-radius:16px 16px 0 0; }
-.my-hand-area { display:flex; align-items:center; justify-content:center; gap:24px; padding:16px 0 22px; }
-.hand-caption { display:flex; flex-direction:column; text-align:right; min-width:0; }
-.hand-caption span { font-size:12px; color:var(--table-muted); }
+.wild-label { position:absolute; bottom:4px; left:50%; transform:translateX(-50%); font-size:9px; font-weight:800; background:#f2be51; color:#322111; padding:1px 4px; border-radius:2px; }
+.card-small .wild-label { font-size:7px; bottom:2px; padding:0 2px; }
+.table-play-area { width:min(860px,100%); margin:12px auto 0; padding:0 24px 20px; position:relative; z-index:3; }
+.my-hand-area { display:flex; align-items:center; flex-direction:column; gap:8px; padding:0 0 16px; position:relative; }
+.hand-caption { display:flex; flex-direction:column; align-items:center; order:2; padding:6px 24px; background:#1e1411ee; border-radius:8px; min-width:240px; }
+.hand-caption span { font-size:11px; color:var(--table-muted); }
 .hand-caption strong { color:#f1ce8e; font-size:16px; }
-.hand-caption small { font-size:11px; color:var(--table-muted); margin-top:5px; }
+.hand-caption small { font-size:12px; color:var(--table-text); margin-top:2px; }
+.my-hand-area .see-cards { position:absolute; top:70px; left:calc(50% + 148px); }
 .table-button { display:inline-flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:12px 18px; min-height:46px; border-radius:10px; background:#34281c; color:var(--table-text); font-size:14px; font-weight:600; cursor:pointer; transition:background .15s; }
 .table-button:hover:not(:disabled) { background:#4c3824; }
 .table-button:disabled { opacity:.45; cursor:not-allowed; }
@@ -77,10 +87,10 @@
 .button-pack { background:#49252a; color:#ffb6b6; }
 .button-pack:hover:not(:disabled) { background:#633037; }
 .see-cards { flex-direction:row; gap:8px; }
-.action-panel { padding-top:12px; border-top:1px solid #3e3021; }
+.action-panel { padding:12px; background:#1c1411f5; border:1px solid #735537; border-radius:12px; box-shadow:0 8px 20px #08050566; }
 .turn-message { display:flex; align-items:center; justify-content:center; gap:8px; font-size:14px; color:#f1ce8e; margin-bottom:12px; }
 .bet-controls { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
-.round-message { text-align:center; padding:16px 0; }
+.round-message { text-align:center; padding:16px 24px; background:#1c1411f5; border-radius:12px; }
 .round-message h2 { font-size:24px; color:#f1ce8e; font-weight:700; }
 .round-message p { font-size:14px; color:var(--table-muted); margin:8px auto 16px; max-width:55ch; }
 .round-result > svg { margin:0 auto 8px; color:#f1ce8e; }
@@ -96,17 +106,37 @@
 .table-rules h2,.end-confirm h2 { font-size:22px; color:#f1ce8e; font-weight:700; }
 .table-rules p,.end-confirm p { font-size:14px; line-height:1.6; color:#decfb9; margin:10px 0 16px; }
 @keyframes deal-in { from { translate:0 -12px; } to { translate:0 0; } }
-@media (min-width:1100px) { .table-stage { height:450px; margin-top:26px; } }
+@media (min-width:900px) and (max-height:850px) {
+ .table-stage { --dealer-height:180px; --arena-height:410px; }
+ .table-felt { inset-inline:64px; }
+ .my-hand-area { padding-bottom:8px; }
+}
+@media (min-width:601px) and (max-width:899px) {
+ .table-stage { --dealer-height:192px; --arena-height:380px; width:calc(100% - 24px); }
+ .dealer-details { right:8px; top:16px; }
+ .table-felt { inset-inline:44px; }
+ .seat-position { width:150px; }
+ .seat-revealed .hand-small .playing-card { width:58px; height:81px; }
+ .seat-revealed .hand-small .playing-card + .playing-card { margin-left:-28px; }
+}
 @media (max-width:600px) {
- .table-screen { background-attachment:scroll; background-position:center top; background-size:100% 100%,auto 860px; }
- .dealer-bar { gap:8px; min-height:124px; margin:4px auto -8px; padding:0 12px; } .dealer-portrait { width:112px; height:132px; } .dealer-details { padding-bottom:12px; } .dealer-heading { gap:8px; margin-bottom:6px; } .dealer-heading strong { font-size:20px; } .dealer-heading span { font-size:11px; } .dealer-option { min-width:54px; padding:8px; font-size:11px; }
+ .table-screen { background-attachment:scroll; background-position:center top; background-size:100% 100%,auto 920px; }
  .table-header { padding:12px; gap:10px; } .table-title h1 { font-size:16px; } .table-title p { font-size:11px; } .connection-status span { display:none; } .table-toolbar { gap:5px; } .table-icon-button { min-width:36px; } .table-back { min-width:36px; }
- .table-stage { height:400px; margin-top:12px; } .table-felt { inset:48px 30px; border-width:8px; border-radius:45%; } .table-felt:after { border-radius:45%; inset:8px; } .felt-brand { font-size:15px; top:27%; } .felt-brand span { font-size:7px; }
- .seat-position { width:94px; } .seat-name { max-width:91px; font-size:11px; } .seat-avatar { width:39px; height:39px; font-size:18px; } .seat-contribution { font-size:9px; } .seat-status { font-size:9px; padding:1px 5px; }
- .joker-indicator .card-small { width:30px; height:42px; } .hand-small .card-small { width:24px; height:34px; } .hand-small { gap:2px; }
- .table-center { gap:10px; top:51%; } .pot-area > strong { font-size:25px; } .pot-area > span { font-size:10px; } .pot-area > small { font-size:9px; } .joker-indicator { flex-direction:column; gap:4px; text-align:center; } .joker-indicator strong { font-size:11px; } .joker-indicator > .joker-description > span { font-size:9px; }
- .table-play-area { padding:8px 14px 20px; } .my-hand-area { flex-wrap:wrap; gap:14px; padding:8px 0 18px; } .hand-caption strong { font-size:14px; } .hand-caption small { font-size:10px; } .playing-card { width:60px; height:84px; } .card-hand { gap:6px; } .see-cards { padding:10px 13px; font-size:12px; } .bet-controls { gap:6px; } .bet-controls .table-button { font-size:12px; padding:10px 4px; } .table-button strong { font-size:14px; } .turn-message { font-size:13px; }
+ .table-stage { --dealer-height:144px; --arena-height:420px; width:100%; margin-top:8px; }
+ .dealer-details { right:8px; top:8px; } .dealer-heading { flex-direction:column; align-items:flex-end; gap:0; margin-bottom:4px; } .dealer-heading strong { font-size:14px; } .dealer-heading span { font-size:10px; }
+ .dealer-picker { flex-direction:column; padding:2px; gap:2px; } .dealer-option { min-width:56px; min-height:44px; padding:6px 8px; font-size:11px; }
+ .table-felt { inset:0 28px 30px; border-width:10px; border-radius:110px; } .table-felt:after { inset:8px; } .felt-brand { font-size:15px; top:24%; } .felt-brand span { font-size:7px; }
+ .seat-position { width:104px; left:clamp(68px,var(--seat-x),calc(100% - 68px)); } .seat-upper { top:14%; } .seat-name { max-width:100px; font-size:11px; } .seat-avatar { width:40px; height:40px; font-size:18px; } .seat-contribution { font-size:9px; } .seat-status { font-size:9px; padding:1px 5px; }
+ .hand-small .card-small { width:36px; height:50px; } .hand-small .playing-card + .playing-card { margin-left:-16px; }
+ .seat-revealed .hand-small .playing-card { width:44px; height:62px; } .seat-revealed .hand-small .playing-card + .playing-card { margin-left:-22px; }
+ .joker-indicator .card-small { width:38px; height:53px; }
+ .table-center { gap:8px; top:46%; } .table-pot-content { gap:8px; } .table-center:has(.table-result-banner) { top:50%; } .pot-area > strong { font-size:28px; } .pot-area > span { font-size:10px; } .pot-area > small { font-size:9px; } .joker-indicator { flex-direction:column; gap:4px; text-align:center; } .joker-indicator strong { font-size:11px; } .joker-indicator > .joker-description > span { font-size:9px; }
+ .table-result-banner { max-width:184px; padding:6px 8px; gap:4px; } .table-result-banner h2 { font-size:12px; } .table-result-banner svg { width:14px; }
+ .table-play-area { margin-top:8px; padding:0 12px 16px; } .my-hand-area { gap:4px; padding-bottom:12px; } .hand-caption { min-width:204px; padding:4px 12px; } .hand-caption strong { font-size:14px; } .hand-caption small { font-size:11px; }
+ .playing-card { width:84px; height:118px; } .card-hand .playing-card + .playing-card { margin-left:-32px; } .hand-small .playing-card + .playing-card { margin-left:-16px; }
+ .my-hand-area .see-cards { position:static; order:3; padding:10px 13px; font-size:12px; }
+ .action-panel { padding:10px; } .bet-controls { gap:6px; } .bet-controls .table-button { font-size:12px; padding:10px 4px; } .table-button strong { font-size:14px; } .turn-message { font-size:13px; }
  .table-footer { padding:10px 14px; font-size:11px; } .round-message h2 { font-size:21px; } .table-error-banner { padding:10px 14px; }
 }
-@media (max-width:370px) { .connection-status { display:none; } .table-stage { height:390px; } .my-hand-area { gap:10px; } .bet-controls { grid-template-columns:repeat(2,1fr); } }
+@media (max-width:370px) { .connection-status { display:none; } .table-stage { --arena-height:420px; } .seat-position { width:94px; } .seat-name { max-width:91px; } .bet-controls { grid-template-columns:repeat(2,1fr); } }
 @media (prefers-reduced-motion:reduce) { .playing-card { animation:none; } .table-screen * { transition:none; } }

@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test": "node tests/gameplay.test.mjs",
+    "test": "node tests/gameplay.test.mjs && node tests/cards.test.mjs",
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",

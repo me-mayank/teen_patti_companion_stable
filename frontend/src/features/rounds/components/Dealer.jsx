@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import anaya from '../../../assets/table/dealer-anaya.png';
-import tara from '../../../assets/table/dealer-tara.png';
+import anaya from '../../../assets/table/dealer-anaya-standing.png';
+import tara from '../../../assets/table/dealer-tara-standing.png';
 
 const dealers = [
   { id: 'anaya', name: 'Anaya', image: anaya },
@@ -23,8 +23,8 @@ export default function Dealer() {
     catch { /* The dealer still switches when browser storage is unavailable. */ }
   };
 
-  return <section className="dealer-bar" aria-label="Table dealer">
-    <img className="dealer-portrait" src={selected.image} alt={`${selected.name}, your table dealer`} width="160" height="180" />
+  return <section className="table-dealer" aria-label="Table dealer">
+    <img className="dealer-portrait" src={selected.image} alt={`${selected.name}, your table dealer`} width="1536" height="1024" />
     <div className="dealer-details">
       <div className="dealer-heading"><strong>{selected.name}</strong><span>Your dealer</span></div>
       <div className="dealer-picker" role="group" aria-label="Choose your dealer">

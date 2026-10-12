@@ -38,12 +38,12 @@ typography:
     fontSize: "13px"
   pot:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif"
-    fontSize: "34px"
+    fontSize: "40px"
     fontWeight: 750
     lineHeight: 1.3
   table-wordmark:
     fontFamily: "Georgia, serif"
-    fontSize: "23px"
+    fontSize: "25px"
     fontWeight: 700
     letterSpacing: "0.05em"
 rounded:
@@ -76,8 +76,8 @@ components:
     backgroundColor: "{colors.card-face}"
     textColor: "{colors.card-black}"
     rounded: "{rounded.card}"
-    width: "76px"
-    height: "106px"
+    width: "110px"
+    height: "154px"
   setup-input:
     backgroundColor: "{colors.slate-950}"
     textColor: "{colors.white}"
@@ -139,15 +139,15 @@ The incumbent palette is warm and muted; the table adds felt green and a slightl
 
 The sans-serif carries names, actions, balances and status. Georgia supplies the understated table wordmark and TP mark on card backs. The table uses tabular numerals for financial values.
 
-The desktop table title is bold (20px), supporting header text is compact (13px), action labels are medium-bold (14px) and action amounts are heavier (17px). The pot is the strongest figure (34px, weight 750, line height 1.3). On mobile, the title becomes 16px, action labels 12px and the pot 25px. The table wordmark becomes 15px. These are component roles, not an app-wide display scale.
+The desktop table title is bold (20px), supporting header text is compact (13px), action labels are medium-bold (14px) and action amounts are heavier (17px). The pot is the strongest figure (40px, weight 750, line height 1.3). On mobile, the title becomes 16px, action labels 12px and the pot 28px. The table wordmark becomes 15px. These are component roles, not an app-wide display scale.
 
 ## Layout
 
-Existing setup forms use a centered, bounded column with inset cards; the game table has its own radial geometry. The table stage is at most 900px wide and 440px tall, increasing to 450px above the 1100px breakpoint. The play area below is at most 720px wide. Header/footer padding is 28px horizontally; the play area uses 24px horizontal padding on desktop.
+Existing setup forms use a centered, bounded column with inset cards; the game table has its own geometry. The table stage is at most 1180px wide. A 232px standing dealer sits centrally behind a 400px arena with a straight top rail and rounded ends. On desktop viewports at most 850px tall, the dealer becomes 180px tall and the arena becomes 410px tall. The hand and action area below is at most 860px wide. Header/footer padding is 28px horizontally; the play area uses 24px horizontal padding on desktop.
 
-Two to six occupied seats are distributed equally around the oval. A signed-in participant is reordered into the bottom position. A spectator who has no seat sees the available ordering without an invented own seat. The pot and optional joker indicator share the center. The player's full-size hand sits in a separate area below the stage.
+Two to six occupied seats follow count-specific positions around the rail, leaving the top-center space for the dealer. A signed-in participant is reordered into the bottom position. A spectator keeps the available ordering without an invented own seat. The pot and optional joker indicator share the center. The player's full-size fan sits immediately below their avatar, with the caption and balance below it. The same fan remains in place after a show. Other server-visible hands enlarge beside their seats; concealed hands remain red backs. A completed-round winner message appears above the central pot.
 
-At 600px and below, the stage is 400px tall, seats/avatars/card fans shrink, and the oval becomes taller relative to its width. The play area uses 14px horizontal padding, and the hand area may wrap. The four action columns remain in place; at 370px and below they become two columns and the stage is 390px tall. No layout requires landscape orientation. The action area is in document flow, not fixed to the viewport. Long names truncate and retain the full name in a title.
+At 600px and below, the dealer is 144px tall and the arena is 420px tall, with a taller oval. Upper seats shift to leave the rail and standing dealer readable, and side seats are bounded away from screen edges. The play area uses 12px horizontal padding. Main cards become 84×118px; concealed seat cards are 36×50px and revealed seat cards 44×62px. The four action columns remain in place; at 370px and below they become two columns. No layout requires landscape orientation. The action area is in document flow, not fixed to the viewport. Long names truncate and retain the full name in a title.
 
 **The anchored-action Rule.** During an active round, keep Pack, Blind/Chaal, Raise and Show/Side show in stable positions for the active participant; disable ineligible controls without removing them.
 
@@ -159,7 +159,7 @@ The felt combines inset gold edging, inset shade and an external shadow (`inset 
 
 ## Shapes
 
-The signature table silhouette is an oval with a substantial brown rail and thin inner edging. Its corner geometry changes from 48% on desktop to 45% on mobile. Player avatars are circles. Full-size cards use small rounded corners (7px); small cards use 4px. Table action controls use 10px corners; navigation controls and rules/confirmation panels use 12px. Existing form containers use 16px corners.
+The signature table silhouette is an oval with a substantial brown rail and thin inner edging. Its straight center rail transitions into 180px rounded ends on desktop and 110px ends on mobile. Player avatars are circles. Full-size cards use small rounded corners (7px); small cards use 4px. Table action controls use 10px corners; navigation controls and rules/confirmation panels use 12px. Existing form containers use 16px corners.
 
 ## Components
 
@@ -175,13 +175,15 @@ The table header contains a back link, truncated game title, mode/round/boot sum
 
 The table screen has an original illustrated private card lounge: burgundy velvet curtains, walnut architecture and warm chandelier lighting. A dark overlay keeps gameplay readable; the hand and action area has a quiet warm-black surface. The felt is a brighter emerald with a layered gold-and-walnut rail. This artwork is confined to the game screen.
 
-A compact dealer area above the table offers two original adult female characters: Anaya in an emerald waistcoat and Tara in a burgundy sari. Their portraits have transparent backgrounds. The two labelled buttons use `aria-pressed`, keyboard focus and at least 44px touch height. Selecting a dealer changes only that viewer's decoration and saves their choice in browser storage. Storage failures fall back gracefully. Mobile reduces the portrait and control widths without hiding the choices or covering any seat.
+A standing dealer centered behind the top rail offers two original adult female characters: Anaya in an emerald waistcoat and Tara in a burgundy sari. Their standing cutouts have transparent backgrounds, with outstretched arms and hands resting across the rail. The selector sits independently in the upper-right corner. The two labelled buttons use `aria-pressed`, keyboard focus and at least 44px touch height. Selecting a dealer changes only that viewer's decoration and saves their choice in browser storage. Storage failures fall back gracefully. Mobile reduces the portrait and stacks the controls without hiding the choices. Player fans are drawn in front of the dealer hands.
 
 ### Cards and hands
 
-Each hand always renders three cards. Without card data, it renders three backs. Faces show rank and suit, expose a spoken rank/suit description, and label matching joker-rank cards WILD with a gold outline. Card fans accompany the player seats; the participant's larger hand appears below the table while the round is unfinished. The UI renders card information received from the server; this visual convention does not establish privacy by itself.
+Each hand always renders three cards. Without card data, it renders three backs. Faces use jumbo corner ranks and suit symbols, traditional pip counts, and licensed court artwork, following the supplied gameplay references. They expose a spoken rank/suit description and label matching joker-rank cards WILD with a gold outline. Full-size cards are 110×154px, concealed seat cards 50×70px and revealed seat cards 70×98px on desktop. Cards overlap by roughly two fifths of their width with a nine-degree outer fan.
 
-Cards enter with a short staggered vertical deal animation (350ms, 80ms per-card delay). Reduced-motion preferences remove it and remove table transitions.
+Every card SVG includes its own artwork and uniquely scoped fragments. Rendering a face needs no external sprite request, including during a blind-to-seen transition or when the same hand is shown in two places. `frontend/scripts/build-card-artwork.py` regenerates the bundled designs from the licensed source deck. The UI renders only card information received from the server; this visual convention does not establish privacy by itself.
+
+Backs enter with a short vertical deal animation (180ms). Reduced-motion preferences remove it and remove table transitions.
 
 ### Player seats and status chips
 
@@ -195,7 +197,7 @@ The pot combines a coin icon, Table pot label, large amount, blind-stake caption
 
 The action panel announces whose turn it is and shows four controls while the round and participant are active. Amounts reflect blind/seen stakes, limited to the amount remaining before the pot cap. Near the cap, an explanation announces automatic comparison. Capped-round results identify the winner or each tied winner and their share. Show/Side show carry explanatory titles and change according to the number of active players. Other disable reasons rely on state and the rules panel; the UI does not give every disabled control a dedicated explanation.
 
-Completion replaces normal play with a winner message and host-only next-deal action. Digital Show reports automatic comparison; Side show presents accept/decline controls to its target and a resolved status after comparison. Earlier physical-card rounds retain their explicit manual-result flow. Rules and end-game confirmation are bounded in-flow panels, not overlay dialogs. Loading, unavailable-table, setup and finished-game states have their own centered messages/actions.
+Completion keeps the participant’s fan visible and replaces the betting controls with a winner message and host-only next-deal action. Digital Show reports automatic comparison; Side show presents accept/decline controls to its target and a resolved status after comparison. Earlier physical-card rounds retain their explicit manual-result flow. Rules and end-game confirmation are bounded in-flow panels, not overlay dialogs. Loading, unavailable-table, setup and finished-game states have their own centered messages/actions.
 
 ### Existing setup fields and containers
 
