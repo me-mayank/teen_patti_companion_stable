@@ -40,3 +40,19 @@ React warnings. A browser fixture using the real PlayingCard and CardHand
 components verified every face on desktop and the reported 4H/6S/3C hand at both
 desktop and 390px mobile sizes, including small table cards. No browser errors.
 The temporary preview was removed after verification. No game rules changed.
+
+
+## Image-generated deck enhancement — 13 October 2026
+
+The built-in image-generation tool restored the face sheet and produced a clean,
+complete upright card back from the supplied references. Enhanced assets are
+saved beside the original images and used by PlayingCard and the preload helper.
+Final prompts are saved in `frontend/src/assets/cards/enhancement-prompts.md`.
+
+- All 36 numbered faces (2–10 in four suits) passed a connected-ink-component pip-count check against their ranks.
+- Every face and joker retains at least eight logical pixels of white border around its measured ink extent; tests validate source hashes for both original and enhanced images.
+- Previously faded 4/5/6 hearts have red pip interiors around RGB (250, 5, 5), and 5/6 spades have black interiors around RGB (10, 10, 10).
+- All 29 frontend tests passed. Production build passed and includes both enhanced PNGs in the PWA cache. Lint completed with existing React warnings.
+- The real PlayingCard/CardHand components were checked in a temporary desktop and 390px mobile gallery, including all 52 faces, the joker, large/small fans and the restored back. No browser errors. The preview was removed after verification.
+
+No dealing, ranking, payment or card-visibility rules changed.

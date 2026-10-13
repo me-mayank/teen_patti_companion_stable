@@ -101,7 +101,7 @@ Portrait layouts use a tall felt oval, compact seat fans and four stable action 
 
 ## Cards
 
-The active deck uses SVG windows into the exact user-supplied Bicycle face sheet, including the printed joker. Red backs map the unobscured half of the supplied photograph and reflect its symmetrical pattern, since the ace covers the left half. The original source images are preserved. Both images preload before a hand is opened and are included in the PWA cache. The old CC0 deck remains an unused reference asset. Attribution is recorded in `frontend/src/assets/licenses/cards.md`.
+The active deck uses SVG windows into an image-generated enhancement of the user-supplied Bicycle face sheet, including the printed joker. Rich reds, deep blacks, clean whites and vivid court details correct the original photograph's uneven fading. The bitmap maps into the original 1440×1800 logical canvas; white margins preserve both indices and every pip. The enhanced red back is a complete upright image reconstructed from the partly obscured reference. Source images and final generation prompts are preserved. Both active images preload and are included in the PWA cache. The old CC0 deck remains an unused reference asset. Attribution is recorded in `frontend/src/assets/licenses/cards.md`.
 
 Main cards are 76×106px with a 44px overlap and seven-degree outer fan. At short heights they reduce to 64×90px; short landscape uses 48×67px. Opponent cards are 40×56px, or 48×67px when revealed. Portrait opponent cards are smaller. Card geometry responds to both viewport width and height. Every hand contains three cards, with spoken labels and a labelled gold outline for wild cards. Reduced motion removes deal and celebration animations.
 

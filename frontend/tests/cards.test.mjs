@@ -20,11 +20,12 @@ const { CardHand } = module.exports;
 const PlayingCard = module.exports.default;
 const render = props => renderToStaticMarkup(React.createElement(PlayingCard, props));
 
-// Measured dark/red ink extents in the original PNG, including both corner
-// indices and every pip/court. Eight source pixels protect the rounded edges.
-const inkFixture = JSON.parse(readFileSync(new URL('./fixtures/bicycle-ink-bounds.json', import.meta.url)));
+// Measured ink extents of both scans in the logical 1440×1800 canvas, including
+// both indices and every pip/court. Eight pixels protect the rounded edges.
 test('every face keeps its entire printed artwork inside the rounded card with a safe border', () => {
-  const source = readFileSync(new URL('../src/assets/cards/bicycle-sheet.png', import.meta.url));
+ for (const [asset, fixture] of [['bicycle-sheet.png', 'bicycle-ink-bounds.json'], ['bicycle-sheet-enhanced.png', 'bicycle-enhanced-ink-bounds.json']]) {
+  const inkFixture = JSON.parse(readFileSync(new URL(`./fixtures/${fixture}`, import.meta.url)));
+  const source = readFileSync(new URL(`../src/assets/cards/${asset}`, import.meta.url));
   assert.equal(createHash('sha256').update(source).digest('hex'), inkFixture.sourceSha256);
   for (const [code, [left, top, right, bottom]] of Object.entries(inkFixture.bounds)) {
     if (code === 'J-grey') continue;
@@ -35,6 +36,7 @@ test('every face keeps its entire printed artwork inside the rounded card with a
     assert.ok(x <= left - 8 && y <= top - 8 && x + width >= right + 8 && y + height >= bottom + 8,
       `${code}: crop ${[x,y,width,height]} clips printed artwork ${[left,top,right,bottom]} or its safe border`);
   }
+ }
 });
 
 function assertSelfContained(svg) {
@@ -44,11 +46,11 @@ function assertSelfContained(svg) {
   assert.ok(references.length > 0, 'Card art must actually be present');
   for (const reference of references) {
     if (reference.startsWith('#')) assert.ok(ids.includes(reference.slice(1)), `Missing artwork fragment ${reference}`);
-    else assert.ok(reference.endsWith('bicycle-sheet.png') || reference.endsWith('bicycle-back-reference.png'), `Unrecognized artwork: ${reference}`);
+    else assert.ok(reference.endsWith('bicycle-sheet-enhanced.png') || reference.endsWith('bicycle-back-enhanced.png'), `Unrecognized artwork: ${reference}`);
   }
 }
 
-test('every face, printed joker and back uses the exact supplied Bicycle artwork', () => {
+test('every face, printed joker and back uses the enhanced Bicycle artwork', () => {
   assertSelfContained(render({}));
   const joker = render({card:{rank:0,suit:'J'}});
   assertSelfContained(joker);
