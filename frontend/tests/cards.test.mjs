@@ -5,6 +5,8 @@ import vm from 'node:vm';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { rolldown } from 'rolldown';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 const entry = fileURLToPath(new URL('../src/features/rounds/components/PlayingCard.jsx', import.meta.url));
 
@@ -17,6 +19,23 @@ new vm.Script(output[0].code).runInNewContext({ React, module, exports: module.e
 const { CardHand } = module.exports;
 const PlayingCard = module.exports.default;
 const render = props => renderToStaticMarkup(React.createElement(PlayingCard, props));
+
+// Measured dark/red ink extents in the original PNG, including both corner
+// indices and every pip/court. Eight source pixels protect the rounded edges.
+const inkFixture = JSON.parse(readFileSync(new URL('./fixtures/bicycle-ink-bounds.json', import.meta.url)));
+test('every face keeps its entire printed artwork inside the rounded card with a safe border', () => {
+  const source = readFileSync(new URL('../src/assets/cards/bicycle-sheet.png', import.meta.url));
+  assert.equal(createHash('sha256').update(source).digest('hex'), inkFixture.sourceSha256);
+  for (const [code, [left, top, right, bottom]] of Object.entries(inkFixture.bounds)) {
+    if (code === 'J-grey') continue;
+    const [suit, label] = code.split('-');
+    const rank = ({ A: 14, K: 13, Q: 12, J: 11 })[label] ?? Number(label);
+    const html = render({ card: { rank, suit } });
+    const [x, y, width, height] = html.match(/viewBox="([^"]+)"/)[1].split(' ').map(Number);
+    assert.ok(x <= left - 8 && y <= top - 8 && x + width >= right + 8 && y + height >= bottom + 8,
+      `${code}: crop ${[x,y,width,height]} clips printed artwork ${[left,top,right,bottom]} or its safe border`);
+  }
+});
 
 function assertSelfContained(svg) {
   const ids = [...svg.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);

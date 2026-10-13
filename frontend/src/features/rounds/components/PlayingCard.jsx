@@ -14,9 +14,14 @@ const rows = [
   ['C-A', 'H-K', 'H-Q', 'H-J', 'H-10', 'H-9', 'H-8', 'H-7'],
   ['H-6', 'H-5', 'H-4', 'H-3', 'H-2', 'H-A'],
 ];
-const columns = [43, 211, 380, 549, 717, 885, 1055, 1225];
-const bounds = [[95,324],[329,550],[554,777],[782,1005],[1012,1230],[1237,1460],[1467,1686]];
-const windows = Object.fromEntries(rows.flatMap((row, y) => row.map((code, x) => [code, [columns[x], bounds[y][0], 167, bounds[y][1] - bounds[y][0]].map(n => n * 1440 / 1408).join(' ')])));
+// Calibrated against the original 1440×1800 PNG, not its resized chat preview.
+// Each boundary includes white space around both indices and all printed pips;
+// the photographed sheet is slightly uneven, so cells aren't a fixed width.
+const columnEdges = [40, 210, 380, 550, 720, 890, 1060, 1232, 1404];
+const rowEdges = [96, 328, 560, 792, 1024, 1258, 1492, 1720];
+const windows = Object.fromEntries(rows.flatMap((row, y) => row.map((code, x) => [code,
+  [columnEdges[x], rowEdges[y], columnEdges[x + 1] - columnEdges[x], rowEdges[y + 1] - rowEdges[y]].join(' '),
+])));
 
 export default function PlayingCard({ card, jokerRank, small = false, index = 0 }) {
   const instance = useId().replace(/[^a-zA-Z0-9_-]/g, '');

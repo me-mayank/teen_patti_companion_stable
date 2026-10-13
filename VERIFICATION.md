@@ -22,3 +22,21 @@ All browser accounts, balances and rounds used the disposable local demo. The so
 - Browser: inspected the current table at 1280×720, 390×844, 320×568 and 844×390. Portrait and landscape document dimensions matched the viewport. Fixed the lower-left six-player seat being obscured by the landscape action dock; all six seat bottoms are now above the dock at 844×390.
 - Browser: closing Table rules now restores focus to its opener. Previously focus returned to the document body.
 - Visual checks used the disposable local demo on a fresh frontend port because older preview origins served cached UI. Its socket origin is not in the demo server's allowlist, so those visual checks used the fallback refresh and showed Reconnecting. Automated backend coverage includes socket access and private-data restrictions; this pass does not claim a fresh multi-browser realtime smoke test.
+
+## Card clipping follow-up — 13 October 2026
+
+The card sheet crops used approximate coordinates from the resized 1408px chat
+preview, scaled to the original image. Those rectangles cut through corner
+indices on several faces. The fix calibrates row and column edges directly in
+the original 1440×1800 PNG, preserving white margins and the compact card fan.
+
+A regression test measures all 52 face and printed-joker crop rectangles against
+independently captured ink extents, requiring an eight-source-pixel safe border.
+The fixture includes a source hash to detect image changes. This test failed on
+the original implementation and passes after calibration.
+
+All 29 frontend tests pass; production build and lint complete with the existing
+React warnings. A browser fixture using the real PlayingCard and CardHand
+components verified every face on desktop and the reported 4H/6S/3C hand at both
+desktop and 390px mobile sizes, including small table cards. No browser errors.
+The temporary preview was removed after verification. No game rules changed.
